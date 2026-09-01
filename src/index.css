@@ -404,6 +404,49 @@
     display: inline-flex;
     align-items: center;
     background: var(--paper-alt);
+    cursor: pointer;
+  }
+  .tabs-nav a.active {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+  .back-home {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--ink-soft);
+    margin-bottom: 18px;
+    cursor: pointer;
+  }
+  .page-header {
+    padding: 28px 0 10px;
+  }
+  .page-header h2 {
+    font-family: 'Oswald', sans-serif;
+    font-size: 26px;
+    margin: 0;
+    color: var(--accent-deep);
+  }
+  .coming-soon {
+    padding: 40px 20px;
+    text-align: center;
+    background: var(--paper-alt);
+    border: 1px dashed var(--line);
+  }
+  .coming-soon p {
+    color: var(--ink-soft);
+    font-size: 15px;
+  }
+  .full-rankings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+  }
+  @media (max-width: 620px) {
+    .full-rankings-grid { grid-template-columns: 1fr; }
   }
 
   /* ---------- Footer ---------- */
