@@ -111,6 +111,11 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     async function loadRankings() {
+      if (!supabase) {
+        // Env vars not configured yet — stay on sample data.
+        if (!cancelled) setLiveRankings([]);
+        return;
+      }
       try {
         const { data, error } = await supabase
           .from('gtw_rankings_snapshots')
