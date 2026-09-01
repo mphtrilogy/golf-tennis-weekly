@@ -101,7 +101,7 @@ function eventLinks(name) {
 export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
-  const [rankExpanded, setRankExpanded] = useState(false);
+  const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'amateur' | 'tutorials' | 'trivia' | 'tv'
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
 
   const c = SAMPLE[theme];
@@ -135,13 +135,16 @@ export default function App() {
     return () => { cancelled = true; };
   }, [theme]);
 
-  const rankColumns = useMemo(() => {
-    const showCount = rankExpanded ? 25 : 5;
+  const rankColumnsHome = useMemo(() => {
     // Once live rows exist, this is where they'd be grouped by tour
     // into the same [{n, d, h}] shape the sample data already uses —
     // left as sample fallback until gtw_rankings_snapshots is seeded.
-    return c.rankBase.map((base) => extendRankings(base, 25).slice(0, showCount));
-  }, [c, rankExpanded]);
+    return c.rankBase.map((base) => extendRankings(base, 25).slice(0, 5));
+  }, [c]);
+
+  const rankColumnsFull = useMemo(() => {
+    return c.rankBase.map((base) => extendRankings(base, 100));
+  }, [c]);
 
   return (
     <div data-theme={theme}>
@@ -158,12 +161,28 @@ export default function App() {
         </div>
         <div className="wrap">
           <div className="tabs-nav">
-            <a href="#rankings">Rankings</a><a href="#majors">Majors &amp; History</a><a href="#amateur">Amateur</a>
-            <a href="#tutorials">Tutorials</a><a href="#trivia">Trivia</a><a href="#tv">TV Schedule</a>
+            {[
+              ['rankings', 'Rankings'],
+              ['majors', 'Majors & History'],
+              ['amateur', 'Amateur'],
+              ['tutorials', 'Tutorials'],
+              ['trivia', 'Trivia'],
+              ['tv', 'TV Schedule'],
+            ].map(([key, label]) => (
+              <a
+                key={key}
+                href="#"
+                className={view === key ? 'active' : ''}
+                onClick={(e) => { e.preventDefault(); setView(key); }}
+              >
+                {label}
+              </a>
+            ))}
           </div>
         </div>
       </header>
 
+      {view === 'home' && (
       <div className="wrap">
         <section>
           <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
@@ -220,7 +239,7 @@ export default function App() {
         <section id="rankings">
           <div className="section-head">
             <span className="section-title">Rankings Snapshot</span>
-            <a className="section-link" href="#rankings">Full top 100 →</a>
+            <a className="section-link" href="#" onClick={(e) => { e.preventDefault(); setView('rankings'); }}>Full top 100 →</a>
           </div>
           <div className="period-toggle">
             {['wk', 'mo', 'yr'].map((p) => (
@@ -233,7 +252,7 @@ export default function App() {
             {c.rankCols.map((label, i) => (
               <div className="rank-col" key={label}>
                 <div className="col-label">{label}</div>
-                {rankColumns[i].map((p, idx) => {
+                {rankColumnsHome[i].map((p, idx) => {
                   const d = deltaLabel(p.d);
                   const q = encodeURIComponent(p.n);
                   return (
@@ -250,8 +269,8 @@ export default function App() {
               </div>
             ))}
           </div>
-          <button className="rank-expand" onClick={() => setRankExpanded((v) => !v)}>
-            {rankExpanded ? 'Show fewer ▴' : 'Show full Top 25 (production: Top 100–150) ▾'}
+          <button className="rank-expand" onClick={() => setView('rankings')}>
+            View full Top 100 →
           </button>
         </section>
 
@@ -309,6 +328,62 @@ export default function App() {
           </div>
         </section>
       </div>
+      )}
+
+      {view === 'rankings' && (
+        <div className="wrap">
+          <div className="page-header">
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <h2>Full Rankings — Top 100</h2>
+          </div>
+          <div className="period-toggle">
+            {['wk', 'mo', 'yr'].map((p) => (
+              <button key={p} className={period === p ? 'active' : ''} onClick={() => setPeriod(p)}>
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="full-rankings-grid">
+            {c.rankCols.map((label, i) => (
+              <div className="rank-col" key={label}>
+                <div className="col-label">{label}</div>
+                {rankColumnsFull[i].map((p, idx) => {
+                  const d = deltaLabel(p.d);
+                  const q = encodeURIComponent(p.n);
+                  return (
+                    <div className="rank-row" key={p.n}>
+                      <span className="num">{idx + 1}</span>
+                      <span className="name">
+                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
+                      </span>
+                      <span className={`delta ${d.cls}`}>{d.txt}</span>
+                      <span className="heat">{heatEmoji(p.h)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {['majors', 'amateur', 'tutorials', 'trivia', 'tv'].includes(view) && (
+        <div className="wrap">
+          <div className="page-header">
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <h2>{{
+              majors: 'Majors & History',
+              amateur: 'Amateur',
+              tutorials: 'Tutorials',
+              trivia: 'Trivia',
+              tv: 'TV Schedule',
+            }[view]}</h2>
+          </div>
+          <div className="coming-soon">
+            <p>This section is still being built — check back soon.</p>
+          </div>
+        </div>
+      )}
 
       <footer>
         <span className="mph-mark">MPH</span>Golf and Tennis Weekly — part of the MPH family
