@@ -449,6 +449,7 @@
     border-radius: 50%;
     background: var(--accent-soft);
     margin: 0 auto 8px;
+    display: block;
   }
   .player-card .name { font-family: 'Oswald', sans-serif; font-size: 13.5px; }
   .player-card .rank { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-bottom: 8px; }
