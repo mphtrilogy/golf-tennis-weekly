@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/fetch-rankings",
+      "schedule": "0 8 * * 2"
+    }
+  ]
+}
