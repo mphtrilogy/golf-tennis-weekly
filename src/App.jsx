@@ -304,6 +304,7 @@ export default function App() {
   const [spotlightPageUrl, setSpotlightPageUrl] = useState(null);
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
+  const [liveLeaderboard, setLiveLeaderboard] = useState(null); // null = not loaded, [] = loaded-but-empty (golf only)
 
   const c = SAMPLE[theme];
 
@@ -381,6 +382,51 @@ export default function App() {
       schedule: scheduleMatches,
     };
   }, [liveMatches]);
+
+  // Live golf leaderboard (PGA + LPGA) — same fetch/derive pattern as
+  // tennis matches, but golf's shape is leaderboard-style (one event,
+  // ranked competitors) rather than head-to-head.
+  useEffect(() => {
+    if (theme !== 'golf') { setLiveLeaderboard([]); return; }
+    let cancelled = false;
+    setLiveLeaderboard(null);
+    supabase
+      .from('gtw_leaderboard')
+      .select('*')
+      .order('position', { ascending: true })
+      .limit(300)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLiveLeaderboard(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setLiveLeaderboard([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
+
+  const golfLive = useMemo(() => {
+    if (!liveLeaderboard || liveLeaderboard.length === 0) return null;
+    const byTour = { pga: [], lpga: [] };
+    for (const row of liveLeaderboard) (byTour[row.tour] ||= []).push(row);
+
+    const buildCard = (rows) => {
+      if (!rows || rows.length === 0) return null;
+      const name = rows[0].tournament_name;
+      const detail = rows[0].status_detail || 'In progress';
+      return { name, meta: detail, rows: [...rows].sort((a, b) => (a.position ?? 999) - (b.position ?? 999)) };
+    };
+
+    const pga = buildCard(byTour.pga);
+    const lpga = buildCard(byTour.lpga);
+    if (!pga && !lpga) return null;
+
+    return {
+      now: pga || lpga,
+      next: pga && lpga && lpga.name !== pga.name ? lpga : null,
+      leaderboardRows: (pga || lpga)?.rows.slice(0, 15) || [],
+    };
+  }, [liveLeaderboard]);
+
+  const activeLive = theme === 'tennis' ? tourneyLive : golfLive;
 
   const dailyPlayerPool = theme === 'golf' ? DAILY_PLAYERS_GOLF : DAILY_PLAYERS_TENNIS;
   const dailyPlayer = getDailyPlayer(dailyPlayerPool);
@@ -655,19 +701,19 @@ export default function App() {
           <div className="tourney-strip">
             <div className="tourney-card">
               <div className="label">In Progress</div>
-              <h4>{tourneyLive?.now.name || c.tourneyNow.name}</h4>
-              <div className="meta">{tourneyLive?.now.meta || c.tourneyNow.meta}</div>
-              {eventLinks(tourneyLive?.now.name || c.tourneyNow.name)}
-              {!tourneyLive && c.tourneyNow.course && <div className="course-line">{c.tourneyNow.course}</div>}
+              <h4>{activeLive?.now.name || c.tourneyNow.name}</h4>
+              <div className="meta">{activeLive?.now.meta || c.tourneyNow.meta}</div>
+              {eventLinks(activeLive?.now.name || c.tourneyNow.name)}
+              {!activeLive && c.tourneyNow.course && <div className="course-line">{c.tourneyNow.course}</div>}
             </div>
             <div className="tourney-card">
               <div className="label">Up Next</div>
-              {tourneyLive ? (
-                tourneyLive.next ? (
+              {activeLive ? (
+                activeLive.next ? (
                   <>
-                    <h4>{tourneyLive.next.name}</h4>
-                    <div className="meta">{tourneyLive.next.meta}</div>
-                    {eventLinks(tourneyLive.next.name)}
+                    <h4>{activeLive.next.name}</h4>
+                    <div className="meta">{activeLive.next.meta}</div>
+                    {eventLinks(activeLive.next.name)}
                   </>
                 ) : (
                   <>
@@ -688,39 +734,59 @@ export default function App() {
         </section>
 
         <section>
-          <div className="section-head"><span className="section-title">Recent Results</span></div>
-          <ul className="results-list">
-            {tourneyLive?.results.length > 0
-              ? tourneyLive.results.map((m) => (
-                  <li key={m.espn_id}>
-                    <div className="result-main">
-                      <span className="who">{m.round || 'Match'}</span>
-                      <span className="what">{m.summary}</span>
-                      {m.player1 && (
-                        <div className="match-player-line">
-                          <span>{m.player1}</span>
-                          {eventLinks(m.player1)}
-                        </div>
-                      )}
-                      {m.player2 && (
-                        <div className="match-player-line">
-                          <span>{m.player2}</span>
-                          {eventLinks(m.player2)}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))
-              : c.results.map((r) => (
-                  <li key={r[0]}>
-                    <div className="result-main">
-                      <span className="who">{r[0]}</span>
-                      <span className="what">{r[1]}</span>
-                      {eventLinks(r[0])}
-                    </div>
-                  </li>
-                ))}
-          </ul>
+          <div className="section-head">
+            <span className="section-title">
+              {theme === 'golf' && golfLive ? 'Leaderboard' : 'Recent Results'}
+            </span>
+          </div>
+          {theme === 'golf' && golfLive ? (
+            <ul className="results-list">
+              {golfLive.leaderboardRows.map((row) => (
+                <li key={row.player_name}>
+                  <div className="result-main">
+                    <span className="who">
+                      {row.position != null ? `${row.position}. ` : ''}{row.player_name}
+                      <span className="delta flat" style={{ marginLeft: 8 }}>{row.score_to_par ?? '—'}</span>
+                    </span>
+                    {eventLinks(row.player_name)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="results-list">
+              {tourneyLive?.results.length > 0
+                ? tourneyLive.results.map((m) => (
+                    <li key={m.espn_id}>
+                      <div className="result-main">
+                        <span className="who">{m.round || 'Match'}</span>
+                        <span className="what">{m.summary}</span>
+                        {m.player1 && (
+                          <div className="match-player-line">
+                            <span>{m.player1}</span>
+                            {eventLinks(m.player1)}
+                          </div>
+                        )}
+                        {m.player2 && (
+                          <div className="match-player-line">
+                            <span>{m.player2}</span>
+                            {eventLinks(m.player2)}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))
+                : c.results.map((r) => (
+                    <li key={r[0]}>
+                      <div className="result-main">
+                        <span className="who">{r[0]}</span>
+                        <span className="what">{r[1]}</span>
+                        {eventLinks(r[0])}
+                      </div>
+                    </li>
+                  ))}
+            </ul>
+          )}
         </section>
 
         <section id="rankings">
