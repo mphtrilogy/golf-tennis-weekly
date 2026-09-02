@@ -303,8 +303,76 @@ export default function App() {
   const [spotlightStats, setSpotlightStats] = useState([]);
   const [spotlightPageUrl, setSpotlightPageUrl] = useState(null);
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
+  const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
 
   const c = SAMPLE[theme];
+
+  // Live tennis matches (golf's scoreboard shape is leaderboard-style,
+  // not head-to-head, so it gets its own build later). Falls back to
+  // sample tournament data when empty or on the golf side.
+  useEffect(() => {
+    if (theme !== 'tennis') { setLiveMatches([]); return; }
+    let cancelled = false;
+    setLiveMatches(null);
+    supabase
+      .from('gtw_matches')
+      .select('*')
+      .order('match_date', { ascending: false })
+      .limit(300)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLiveMatches(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setLiveMatches([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
+
+  // Derive "current tournament" (most recently active), "up next"
+  // (a different tournament with matches still ahead), and a recent
+  // results list — all from the same flat matches table.
+  const tourneyLive = useMemo(() => {
+    if (!liveMatches || liveMatches.length === 0) return null;
+    const now = Date.now();
+    const byTournament = {};
+    for (const m of liveMatches) {
+      (byTournament[m.tournament_name] ||= []).push(m);
+    }
+    const names = Object.keys(byTournament);
+    if (names.length === 0) return null;
+
+    // Current: the tournament with the most recent match at/before now
+    // (or the most recent overall if everything's in the future).
+    const mostRecentFor = (name) =>
+      Math.max(...byTournament[name].map((m) => new Date(m.match_date).getTime()));
+    const current = names.reduce((best, name) =>
+      mostRecentFor(name) > mostRecentFor(best) ? name : best, names[0]);
+
+    const currentMatches = byTournament[current].sort(
+      (a, b) => new Date(b.match_date) - new Date(a.match_date)
+    );
+    const liveCount = currentMatches.filter((m) => m.status_state === 'in').length;
+    const latestRound = currentMatches[0]?.round || null;
+    const nowMeta = liveCount > 0
+      ? `${liveCount} match${liveCount === 1 ? '' : 'es'} live now`
+      : latestRound ? `${latestRound} underway` : 'In progress';
+
+    const results = currentMatches
+      .filter((m) => m.status_state === 'post' && m.summary)
+      .slice(0, 6);
+
+    // Up next: a different tournament with matches still ahead of now.
+    const upcoming = names
+      .filter((n) => n !== current)
+      .map((n) => ({ name: n, next: Math.min(...byTournament[n].map((m) => new Date(m.match_date).getTime())) }))
+      .filter((t) => t.next > now)
+      .sort((a, b) => a.next - b.next)[0];
+
+    return {
+      now: { name: current, meta: nowMeta },
+      next: upcoming ? { name: upcoming.name, meta: 'Draw building' } : null,
+      results,
+    };
+  }, [liveMatches]);
 
   const dailyPlayerPool = theme === 'golf' ? DAILY_PLAYERS_GOLF : DAILY_PLAYERS_TENNIS;
   const dailyPlayer = getDailyPlayer(dailyPlayerPool);
@@ -570,38 +638,42 @@ export default function App() {
           <div className="tourney-strip">
             <div className="tourney-card">
               <div className="label">In Progress</div>
-              <h4>{c.tourneyNow.name}</h4>
-              <div className="meta">{c.tourneyNow.meta}</div>
-              {eventLinks(c.tourneyNow.name)}
-              {c.tourneyNow.course && <div className="course-line">{c.tourneyNow.course}</div>}
+              <h4>{tourneyLive?.now.name || c.tourneyNow.name}</h4>
+              <div className="meta">{tourneyLive?.now.meta || c.tourneyNow.meta}</div>
+              {eventLinks(tourneyLive?.now.name || c.tourneyNow.name)}
+              {!tourneyLive && c.tourneyNow.course && <div className="course-line">{c.tourneyNow.course}</div>}
             </div>
             <div className="tourney-card">
               <div className="label">Up Next</div>
-              <h4>{c.tourneyNext.name}</h4>
-              <div className="meta">{c.tourneyNext.meta}</div>
-              {eventLinks(c.tourneyNext.name)}
-              {c.tourneyNext.course && <div className="course-line">{c.tourneyNext.course}</div>}
+              <h4>{tourneyLive?.next?.name || c.tourneyNext.name}</h4>
+              <div className="meta">{tourneyLive?.next?.meta || c.tourneyNext.meta}</div>
+              {eventLinks(tourneyLive?.next?.name || c.tourneyNext.name)}
+              {!tourneyLive && c.tourneyNext.course && <div className="course-line">{c.tourneyNext.course}</div>}
             </div>
           </div>
         </section>
 
         <section>
-          <div className="section-head"><span className="section-title">Last Week's Results</span></div>
-          <div className="week-nav">
-            <button>&larr; Prior Week</button>
-            <span>WEEK OF —</span>
-            <button>This Week &rarr;</button>
-          </div>
+          <div className="section-head"><span className="section-title">Recent Results</span></div>
           <ul className="results-list">
-            {c.results.map((r) => (
-              <li key={r[0]}>
-                <div className="result-main">
-                  <span className="who">{r[0]}</span>
-                  <span className="what">{r[1]}</span>
-                  {eventLinks(r[0])}
-                </div>
-              </li>
-            ))}
+            {tourneyLive?.results.length > 0
+              ? tourneyLive.results.map((m) => (
+                  <li key={m.espn_id}>
+                    <div className="result-main">
+                      <span className="who">{m.round || 'Match'}</span>
+                      <span className="what">{m.summary}</span>
+                    </div>
+                  </li>
+                ))
+              : c.results.map((r) => (
+                  <li key={r[0]}>
+                    <div className="result-main">
+                      <span className="who">{r[0]}</span>
+                      <span className="what">{r[1]}</span>
+                      {eventLinks(r[0])}
+                    </div>
+                  </li>
+                ))}
           </ul>
         </section>
 
