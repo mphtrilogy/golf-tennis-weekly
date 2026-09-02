@@ -326,6 +326,14 @@
   .results-list li:last-child { border-bottom: none; }
   .results-list .who { font-weight: 700; }
   .results-list .what { color: var(--ink-soft); font-size: 13px; }
+  .match-player-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13.5px;
+    color: var(--ink);
+  }
   .results-list li { flex-wrap: wrap; }
   .results-list .result-main { display: flex; flex-direction: column; }
   .results-list .event-links { margin-top: 3px; }
