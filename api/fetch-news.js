@@ -54,10 +54,12 @@ async function fetchOneFeed(url, sport) {
   const $ = cheerio.load(xml, { xmlMode: true });
 
   const rows = [];
-  const items = $('item').slice(0, 10).toArray();
+  const items = $('item').slice(0, 25).toArray();
   const feedLabel = new URL(url).hostname.replace('www.', '');
 
+  let index = -1;
   for (const el of items) {
+    index++;
     const title = $(el).find('title').first().text().trim();
     const link = $(el).find('link').first().text().trim();
     const pubDate = $(el).find('pubDate').first().text().trim();
@@ -68,7 +70,9 @@ async function fetchOneFeed(url, sport) {
       $(el).find('media\\:content, content').first().attr('url') ||
       $(el).find('enclosure').first().attr('url') ||
       null;
-    if (!image) image = await fetchOgImage(link);
+    // Only worth the extra fetch for the featured slots (first 5) —
+    // the long headline list below doesn't render images at all.
+    if (!image && index < 5) image = await fetchOgImage(link);
 
     rows.push({
       sport,
