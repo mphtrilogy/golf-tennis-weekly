@@ -457,7 +457,7 @@ export default function App() {
       .select('*')
       .eq('sport', theme)
       .order('published_at', { ascending: false })
-      .limit(8)
+      .limit(25)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error || !data || data.length === 0) {
@@ -808,6 +808,23 @@ export default function App() {
                         </div>
                       ))}
                 </div>
+                {useLive && liveNews.length > 5 && (
+                  <div className="headline-list">
+                    <div className="headline-list-label">MORE HEADLINES</div>
+                    {liveNews.slice(5).map((n, i) => (
+                      <a
+                        key={n.link}
+                        href={n.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`headline-row ${i % 2 === 0 ? 'even' : 'odd'}`}
+                      >
+                        <span className="headline-title">{n.title}</span>
+                        <span className="headline-source">{n.source} →</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </>
             );
           })()}
