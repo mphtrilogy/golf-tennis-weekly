@@ -671,6 +671,18 @@ export default function App() {
                     <div className="result-main">
                       <span className="who">{m.round || 'Match'}</span>
                       <span className="what">{m.summary}</span>
+                      {m.player1 && (
+                        <div className="match-player-line">
+                          <span>{m.player1}</span>
+                          {eventLinks(m.player1)}
+                        </div>
+                      )}
+                      {m.player2 && (
+                        <div className="match-player-line">
+                          <span>{m.player2}</span>
+                          {eventLinks(m.player2)}
+                        </div>
+                      )}
                     </div>
                   </li>
                 ))
@@ -865,6 +877,18 @@ export default function App() {
                       <span className="what">
                         {m.tournament_name}{m.round ? ` · ${m.round}` : ''}{m.court ? ` · ${m.court}` : ''} · {when}
                       </span>
+                      {m.player1 && (
+                        <div className="match-player-line">
+                          <span>{m.player1}</span>
+                          {eventLinks(m.player1)}
+                        </div>
+                      )}
+                      {m.player2 && (
+                        <div className="match-player-line">
+                          <span>{m.player2}</span>
+                          {eventLinks(m.player2)}
+                        </div>
+                      )}
                     </div>
                   </li>
                 );
