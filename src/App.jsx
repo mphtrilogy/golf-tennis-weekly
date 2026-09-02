@@ -596,31 +596,70 @@ export default function App() {
   // order of c.rankCols (men's tour first, women's second).
   const TOUR_BY_SPORT = { golf: ['owgr', 'rolex'], tennis: ['atp', 'wta'] };
 
-  // Group the raw fetched rows into per-tour columns using only the
-  // most recent week_of for that tour. Returns null per column until
-  // that tour actually has data (e.g. women's golf/Rolex, not fetched
-  // yet) — the render below falls back to sample data for that column
-  // specifically, so one missing tour doesn't blank out the whole page.
+  // Group the raw fetched rows into per-tour columns, diffing each
+  // player's current rank against an earlier snapshot to get real
+  // movement — not the hardcoded "always flat" placeholder this used to
+  // be. Lookback distance depends on the WK/MO/YR toggle; if there
+  // aren't enough stored weeks yet to reach that far back, it falls
+  // back to the earliest snapshot available rather than showing nothing.
   const liveColumnsBySport = useMemo(() => {
     if (!liveRankings || liveRankings.length === 0) return null;
     const tours = TOUR_BY_SPORT[theme] || [];
+    const lookbackWeeks = { wk: 1, mo: 4, yr: 52 };
+    const targetBack = lookbackWeeks[period] || 1;
+
     return tours.map((tour) => {
       const rowsForTour = liveRankings.filter((r) => r.tour === tour);
       if (rowsForTour.length === 0) return null;
-      const latestWeek = rowsForTour.reduce(
-        (max, r) => (r.week_of > max ? r.week_of : max),
-        rowsForTour[0].week_of
-      );
-      const thisWeek = rowsForTour
-        .filter((r) => r.week_of === latestWeek)
-        .sort((a, b) => a.rank - b.rank);
-      // Movement (d) is 0/flat until a second week's snapshot exists to
-      // diff against — this is the very first pull, so there's nothing
-      // to compare yet. Once next Tuesday's cron run lands, real deltas
-      // take over automatically.
-      return thisWeek.map((r) => ({ n: r.player_name, d: 0, h: null }));
+
+      const weeksAvailable = [...new Set(rowsForTour.map((r) => r.week_of))].sort((a, b) => (a < b ? 1 : -1));
+      if (weeksAvailable.length === 0) return null;
+      const currentWeek = weeksAvailable[0];
+      // Use the earliest available week if we don't have enough history
+      // to reach the full lookback distance yet.
+      const compareWeek = weeksAvailable[Math.min(targetBack, weeksAvailable.length - 1)];
+
+      const thisWeekRows = rowsForTour.filter((r) => r.week_of === currentWeek).sort((a, b) => a.rank - b.rank);
+      const compareRankByName = {};
+      if (compareWeek !== currentWeek) {
+        for (const r of rowsForTour.filter((r) => r.week_of === compareWeek)) {
+          compareRankByName[r.player_name] = r.rank;
+        }
+      }
+
+      return thisWeekRows.map((r) => {
+        const prevRank = compareRankByName[r.player_name];
+        const d = prevRank != null ? prevRank - r.rank : 0; // positive = moved up
+        const h = d >= 3 ? 'hot' : d <= -3 ? 'cold' : null;
+        return { n: r.player_name, d, h };
+      });
     });
-  }, [liveRankings, theme]);
+  }, [liveRankings, theme, period]);
+
+  // Home page Players cards: #1 men's, #1 women's, and whoever's
+  // risen the most this week (🔥) — pulled from the same live rankings
+  // data, not a separate fetch. Any slot without real data (e.g.
+  // women's golf/Rolex, not live yet) falls back to sample individually
+  // rather than blanking the whole section.
+  const featuredPlayers = useMemo(() => {
+    if (!liveColumnsBySport) return null;
+    const [menCol, womenCol] = liveColumnsBySport;
+    const topMan = menCol && menCol.length > 0 ? menCol[0] : null;
+    const topWoman = womenCol && womenCol.length > 0 ? womenCol[0] : null;
+
+    const combined = [...(menCol || []), ...(womenCol || [])];
+    const hottest = combined.length > 0
+      ? combined.reduce((best, p) => (p.d > (best?.d ?? -Infinity) ? p : best), null)
+      : null;
+    const hasHeat = hottest && hottest.d > 0;
+
+    if (!topMan && !topWoman) return null;
+    return {
+      topMan: topMan ? { name: topMan.n, tag: "#1 Men's" } : null,
+      topWoman: topWoman ? { name: topWoman.n, tag: "#1 Women's" } : null,
+      hottest: hasHeat ? { name: hottest.n, tag: `🔥 +${hottest.d} this week` } : null,
+    };
+  }, [liveColumnsBySport]);
 
   const rankColumnsHome = useMemo(() => {
     return c.rankBase.map((base, i) => {
@@ -875,13 +914,19 @@ export default function App() {
             <button>Search</button>
           </div>
           <div className="player-cards">
-            {c.players.map((p) => {
-              const q = encodeURIComponent(p);
+            {[
+              { real: featuredPlayers?.topMan, fallback: c.players[0] },
+              { real: featuredPlayers?.topWoman, fallback: c.players[1] },
+              { real: featuredPlayers?.hottest, fallback: c.players[2] },
+            ].map((slot, i) => {
+              const name = slot.real?.name || slot.fallback;
+              const tag = slot.real?.tag || 'Profile →';
+              const q = encodeURIComponent(name);
               return (
-                <div className="player-card" key={p}>
+                <div className="player-card" key={i}>
                   <div className="avatar" />
-                  <div className="name">{p}</div>
-                  <div className="rank">Profile →</div>
+                  <div className="name">{name}</div>
+                  <div className="rank">{tag}</div>
                   <div className="player-links">
                     <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">Wiki</a>
                     <a href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noopener noreferrer">Search</a>
