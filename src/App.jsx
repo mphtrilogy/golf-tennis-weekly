@@ -218,12 +218,90 @@ function getDailyPlayer(pool) {
   return pool[daysSinceEpoch % pool.length];
 }
 
+// Pulls |key = value pairs out of a MediaWiki infobox template, ported
+// from The Scouting Report. Stops at the first top-level closing }} so
+// it doesn't wander into later templates on the page.
+// Deterministic "dispatch number" from a name, purely decorative —
+// same flavor as The Scouting Report's card numbering.
+function dispatchNumber(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return String(1000 + (hash % 9000));
+}
+
+function initials(name) {
+  return name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+}
+
+function parseInfobox(wikitext) {
+  const start = wikitext.indexOf('{{Infobox');
+  if (start === -1) return {};
+  let depth = 0;
+  let end = start;
+  for (let i = start; i < wikitext.length; i++) {
+    if (wikitext.slice(i, i + 2) === '{{') { depth++; i++; }
+    else if (wikitext.slice(i, i + 2) === '}}') { depth--; i++; if (depth === 0) { end = i; break; } }
+  }
+  const block = wikitext.slice(start, end);
+  const fields = {};
+  const lines = block.split(/\n\|/).slice(1);
+  for (const line of lines) {
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).split('\n')[0].trim();
+    value = value
+      .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') // [[link|text]] -> text
+      .replace(/'''?/g, '')
+      .replace(/<ref[^>]*\/>/gi, '')
+      .replace(/<ref[^>]*>.*?<\/ref>/gi, '')
+      .replace(/\{\{[^{}]*\}\}/g, '') // strip one level of nested templates (flag icons, etc.)
+      .replace(/<!--.*?-->/g, '')
+      .trim();
+    if (key && value) fields[key] = value;
+  }
+  return fields;
+}
+
+// Golf and tennis Wikipedia infoboxes use entirely different field names
+// than the statlabelN/statvalueN pattern common on NFL/NBA pages, so this
+// uses its own candidate list per sport rather than reusing that pattern.
+// Returns up to 4 chips, skipping any field that wasn't found or that
+// still looks like leftover wiki markup after cleaning.
+function statChipsForSport(fields, sport) {
+  const candidates = sport === 'golf'
+    ? [
+        { key: 'yearpro', label: 'Turned Pro' },
+        { key: 'extour', label: 'Tour' },
+        { key: 'prowins', label: 'Pro Wins' },
+        { key: 'majorwins', label: 'Majors' },
+      ]
+    : [
+        { key: 'turnedpro', label: 'Turned Pro' },
+        { key: 'plays', label: 'Plays' },
+        { key: 'singlestitles', label: 'Singles Titles' },
+        { key: 'highestsinglesranking', label: 'Career-High Rank' },
+      ];
+  const chips = [];
+  for (const { key, label } of candidates) {
+    const value = fields[key];
+    if (value && !value.includes('{{') && !value.includes('}}') && value.length < 40) {
+      chips.push({ label, value });
+    }
+    if (chips.length >= 4) break;
+  }
+  return chips;
+}
+
 export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
   const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'amateur' | 'tutorials' | 'trivia' | 'tv'
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [spotlightPhoto, setSpotlightPhoto] = useState(null);
+  const [spotlightDescription, setSpotlightDescription] = useState(null);
+  const [spotlightStats, setSpotlightStats] = useState([]);
+  const [spotlightPageUrl, setSpotlightPageUrl] = useState(null);
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
 
   const c = SAMPLE[theme];
@@ -231,26 +309,61 @@ export default function App() {
   const dailyPlayerPool = theme === 'golf' ? DAILY_PLAYERS_GOLF : DAILY_PLAYERS_TENNIS;
   const dailyPlayer = getDailyPlayer(dailyPlayerPool);
 
-  // Self-healing photo layer, ported from nysportsdaily: search Wikipedia
-  // by name rather than trust a stored URL, so this never breaks even if
-  // a page gets renamed. Falls back to no photo (gradient block) silently.
+  // Trading-card data layer, ported from The Scouting Report's approach:
+  // search Wikipedia by name (self-healing — never depends on a stored
+  // URL that could go stale), pull the clean summary for photo/description,
+  // then pull raw infobox wikitext for a few "stat chip" fields. Golf and
+  // tennis infoboxes use different field names than the statlabelN/
+  // statvalueN pattern the original tool was built around, so this uses
+  // its own sport-specific candidate list instead.
   useEffect(() => {
     let cancelled = false;
     setSpotlightPhoto(null);
+    setSpotlightDescription(null);
+    setSpotlightStats([]);
+    setSpotlightPageUrl(null);
+
     const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(dailyPlayer.name)}&format=json&origin=*&srlimit=1`;
+    let resolvedTitle = null;
+
     fetch(searchUrl)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return null;
         const title = data?.query?.search?.[0]?.title;
         if (!title) return null;
+        resolvedTitle = title;
         return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
       })
       .then((res) => (res && res.ok ? res.json() : null))
       .then((summary) => {
-        if (!cancelled && summary?.thumbnail?.source) setSpotlightPhoto(summary.thumbnail.source);
+        if (cancelled || !summary) return;
+        if (summary.thumbnail?.source) setSpotlightPhoto(summary.thumbnail.source);
+        if (summary.description) setSpotlightDescription(summary.description);
+        if (summary.content_urls?.desktop?.page) setSpotlightPageUrl(summary.content_urls.desktop.page);
       })
       .catch(() => {});
+
+    // Separate chain for infobox stats — independent of the summary
+    // fetch above so a failure here never blocks the photo/description.
+    (async () => {
+      try {
+        // Reuse the same search result rather than searching twice.
+        const searchData = await (await fetch(searchUrl)).json();
+        const title = searchData?.query?.search?.[0]?.title;
+        if (!title || cancelled) return;
+        const wikitextUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&format=json&origin=*&titles=${encodeURIComponent(title)}`;
+        const wtData = await (await fetch(wikitextUrl)).json();
+        const page = Object.values(wtData?.query?.pages || {})[0];
+        const wikitext = page?.revisions?.[0]?.slots?.main?.['*'] || '';
+        const fields = parseInfobox(wikitext);
+        const chips = statChipsForSport(fields, theme);
+        if (!cancelled) setSpotlightStats(chips);
+      } catch {
+        // Non-fatal — the card still works with photo + description only.
+      }
+    })();
+
     return () => { cancelled = true; };
   }, [dailyPlayer.name]);
 
@@ -400,17 +513,55 @@ export default function App() {
       <div className="wrap">
         <section>
           <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
-          <div className="spotlight">
-            <div
-              className="spotlight-photo"
-              style={spotlightPhoto ? { backgroundImage: `url(${spotlightPhoto})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
-            />
-            <div>
-              <div className="spotlight-eyebrow">{dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}</div>
-              <h3>{dailyPlayer.name}</h3>
-              <p>{dailyPlayer.fact}</p>
-              {eventLinks(dailyPlayer.name)}
+          <div className="dispatch-card">
+            <div className="dispatch-perf" aria-hidden="true">
+              {Array.from({ length: 24 }).map((_, i) => <span key={i} className="dispatch-perf-dot" />)}
             </div>
+            <div className="dispatch-header-row">
+              <span className="dispatch-no">DISPATCH NO. {dispatchNumber(dailyPlayer.name)}</span>
+              <span className="dispatch-tag">{dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}</span>
+            </div>
+            <div className="dispatch-name-row">
+              {spotlightPhoto ? (
+                <img className="dispatch-thumb" src={spotlightPhoto} alt="" />
+              ) : (
+                <div className="dispatch-avatar-fallback">{initials(dailyPlayer.name)}</div>
+              )}
+              <div>
+                <div className="dispatch-name">{dailyPlayer.name}</div>
+                {spotlightDescription && <div className="dispatch-desc">{spotlightDescription}</div>}
+              </div>
+            </div>
+            <div className="dispatch-hr" />
+            <p className="dispatch-fact">{dailyPlayer.fact}</p>
+            {spotlightStats.length > 0 && (
+              <div className="dispatch-stats-row">
+                {spotlightStats.map((s) => (
+                  <div className="dispatch-stat-chip" key={s.label}>
+                    <div className="dispatch-stat-value">{s.value}</div>
+                    <div className="dispatch-stat-label">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="dispatch-hr" />
+            <div className="dispatch-link-row">
+              <a
+                className="dispatch-link-chip"
+                href={spotlightPageUrl || `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(dailyPlayer.name)}`}
+                target="_blank" rel="noopener noreferrer"
+              >
+                Wikipedia →
+              </a>
+              <a
+                className="dispatch-link-chip"
+                href={`https://www.google.com/search?q=${encodeURIComponent(dailyPlayer.name)}`}
+                target="_blank" rel="noopener noreferrer"
+              >
+                Search →
+              </a>
+            </div>
+            <div className="dispatch-footer">SOURCE: WIKIPEDIA · SCOUTING REPORT</div>
           </div>
         </section>
 
