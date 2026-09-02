@@ -3,6 +3,10 @@
     {
       "path": "/api/fetch-rankings",
       "schedule": "0 8 * * 2"
+    },
+    {
+      "path": "/api/fetch-news",
+      "schedule": "0 9 * * *"
     }
   ]
 }
