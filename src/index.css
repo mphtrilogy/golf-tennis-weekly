@@ -475,6 +475,8 @@
   .top-story .thumb-large {
     width: 100%; height: 140px;
     background: linear-gradient(135deg, var(--accent-soft), var(--accent));
+    object-fit: cover;
+    display: block;
   }
   .top-story .badge {
     display: inline-block;
@@ -500,6 +502,8 @@
     background: var(--paper-alt);
     border: 1px solid var(--line);
     margin-bottom: 8px;
+    object-fit: cover;
+    display: block;
   }
   .news-item h5 { font-family: 'Oswald', sans-serif; font-size: 15px; margin: 0 0 4px; }
   .news-item .src { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-soft); }
