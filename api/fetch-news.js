@@ -82,15 +82,24 @@ async function fetchNewsForSport(sport) {
     });
   }
 
-  return rows;
+  const seen = new Set();
+  return rows.filter((r) => {
+    if (seen.has(r.title)) return false;
+    seen.add(r.title);
+    return true;
+  });
 }
 
-async function upsertRows(supabase, rows) {
+async function replaceRowsForSport(supabase, sport, rows) {
+  // Delete-then-insert rather than upsert: news should fully reflect
+  // the latest fetch, not accumulate old titles forever (which is what
+  // happened switching away from Google News — old rows with different
+  // titles just sat there indefinitely and could out-rank fresh ones).
+  const { error: delErr } = await supabase.from('gtw_news').delete().eq('sport', sport);
+  if (delErr) throw new Error(`Supabase delete failed for ${sport}: ${delErr.message}`);
   if (rows.length === 0) return;
-  const { error } = await supabase
-    .from('gtw_news')
-    .upsert(rows, { onConflict: 'sport,title' });
-  if (error) throw new Error(`Supabase upsert failed: ${error.message}`);
+  const { error: insErr } = await supabase.from('gtw_news').insert(rows);
+  if (insErr) throw new Error(`Supabase insert failed for ${sport}: ${insErr.message}`);
 }
 
 export default async function handler(req, res) {
@@ -108,24 +117,16 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, serviceKey);
 
   const summary = { golf: 0, tennis: 0, errors: [] };
-  const allRows = [];
 
   for (const sport of ['golf', 'tennis']) {
     try {
       const rows = await fetchNewsForSport(sport);
-      allRows.push(...rows);
+      await replaceRowsForSport(supabase, sport, rows);
       summary[sport] = rows.length;
     } catch (err) {
       summary.errors.push(`${sport}: ${err.message}`);
     }
   }
 
-  try {
-    await upsertRows(supabase, allRows);
-  } catch (err) {
-    summary.errors.push(`upsert: ${err.message}`);
-    return res.status(500).json(summary);
-  }
-
-  return res.status(200).json({ ...summary, totalRowsWritten: allRows.length });
+  return res.status(200).json(summary);
 }
