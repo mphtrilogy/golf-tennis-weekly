@@ -19,8 +19,10 @@ import * as cheerio from 'cheerio';
 export const config = { maxDuration: 30 };
 
 const FEEDS = {
-  golf: 'https://golf.com/feed/',
-  tennis: 'https://www.espn.com/espn/rss/tennis/news',
+  golf: ['https://golf.com/feed/'],
+  // ESPN's dedicated tennis "wire" feed appears to sit empty much of
+  // the time — BBC Sport's tennis feed is the fallback if so.
+  tennis: ['https://www.espn.com/espn/rss/tennis/news', 'https://feeds.bbci.co.uk/sport/tennis/rss.xml'],
 };
 
 async function fetchOgImage(url) {
@@ -43,16 +45,17 @@ async function fetchOgImage(url) {
   }
 }
 
-async function fetchNewsForSport(sport) {
-  const res = await fetch(FEEDS[sport], {
+async function fetchOneFeed(url, sport) {
+  const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
   });
-  if (!res.ok) throw new Error(`Feed fetch failed (${res.status}) for ${sport}`);
+  if (!res.ok) throw new Error(`Feed fetch failed (${res.status}): ${url}`);
   const xml = await res.text();
   const $ = cheerio.load(xml, { xmlMode: true });
 
   const rows = [];
   const items = $('item').slice(0, 10).toArray();
+  const feedLabel = new URL(url).hostname.replace('www.', '');
 
   for (const el of items) {
     const title = $(el).find('title').first().text().trim();
@@ -61,27 +64,40 @@ async function fetchNewsForSport(sport) {
     const creator = $(el).find('dc\\:creator, creator').first().text().trim();
     if (!title || !link) continue;
 
-    // Real image, straight from the feed — this is the part Google
-    // News could never give us.
     let image =
       $(el).find('media\\:content, content').first().attr('url') ||
       $(el).find('enclosure').first().attr('url') ||
       null;
-
-    // Rare fallback: only scrape the article page if the feed itself
-    // didn't include an image.
     if (!image) image = await fetchOgImage(link);
 
     rows.push({
       sport,
       title,
-      source: creator ? `${creator} (${sport === 'golf' ? 'Golf.com' : 'ESPN'})` : (sport === 'golf' ? 'Golf.com' : 'ESPN'),
+      source: creator ? `${creator} (${feedLabel})` : feedLabel,
       link,
       published_at: pubDate ? new Date(pubDate).toISOString() : null,
       image_url: image,
     });
   }
 
+  return rows;
+}
+
+async function fetchNewsForSport(sport) {
+  let lastErr = null;
+  for (const url of FEEDS[sport]) {
+    try {
+      const rows = await fetchOneFeed(url, sport);
+      if (rows.length > 0) return dedupeByTitle(rows);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  throw new Error(`All feeds for ${sport} returned zero items`);
+}
+
+function dedupeByTitle(rows) {
   const seen = new Set();
   return rows.filter((r) => {
     if (seen.has(r.title)) return false;
@@ -91,13 +107,14 @@ async function fetchNewsForSport(sport) {
 }
 
 async function replaceRowsForSport(supabase, sport, rows) {
-  // Delete-then-insert rather than upsert: news should fully reflect
-  // the latest fetch, not accumulate old titles forever (which is what
-  // happened switching away from Google News — old rows with different
-  // titles just sat there indefinitely and could out-rank fresh ones).
+  // Only touch the table once we know we have real rows to replace it
+  // with — a failed or empty fetch must leave existing data alone
+  // rather than wiping it out for nothing.
+  if (!rows || rows.length === 0) {
+    throw new Error(`Refusing to clear ${sport} rows — new fetch returned nothing`);
+  }
   const { error: delErr } = await supabase.from('gtw_news').delete().eq('sport', sport);
   if (delErr) throw new Error(`Supabase delete failed for ${sport}: ${delErr.message}`);
-  if (rows.length === 0) return;
   const { error: insErr } = await supabase.from('gtw_news').insert(rows);
   if (insErr) throw new Error(`Supabase insert failed for ${sport}: ${insErr.message}`);
 }
