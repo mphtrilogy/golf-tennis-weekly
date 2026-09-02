@@ -98,13 +98,191 @@ function eventLinks(name) {
   );
 }
 
+// ---------------------------------------------------------------------
+// Daily Spotlight rosters — mixes current stars with legends, same
+// spirit as nysportsdaily's DAILY_PLAYERS. Modest starting list (easy
+// to extend later); each entry just needs a name and a short fact —
+// photos are resolved live via Wikipedia search, not stored here.
+// ---------------------------------------------------------------------
+const DAILY_PLAYERS_GOLF = [
+  { name: 'Scottie Scheffler', active: true, fact: 'The dominant force in men\'s golf in recent seasons, spending extended stretches at world No. 1.' },
+  { name: 'Rory McIlroy', active: true, fact: 'Completed the career Grand Slam with his 2025 Masters win, joining an elite group of golfers to win all four majors.' },
+  { name: 'Jon Rahm', active: true, fact: 'Former world No. 1 known for an aggressive, powerful playing style.' },
+  { name: 'Xander Schauffele', active: true, fact: 'Two-time major champion known for his consistency across all four majors.' },
+  { name: 'Ludvig Åberg', active: true, fact: 'One of the fastest-rising young stars in men\'s golf since turning professional.' },
+  { name: 'Viktor Hovland', active: true, fact: 'Norwegian standout known for elite ball-striking and a breakout run of PGA Tour wins.' },
+  { name: 'Bryson DeChambeau', active: true, fact: 'Known for a science-driven approach to the game and exceptional driving distance.' },
+  { name: 'Nelly Korda', active: true, fact: "One of the top-ranked women's golfers, known for a dominant run of LPGA Tour wins." },
+  { name: 'Lydia Ko', active: true, fact: 'Became the youngest golfer, male or female, to reach world No. 1 in professional golf.' },
+  { name: 'Lilia Vu', active: true, fact: "Multiple major champion who became one of the LPGA Tour's top players in recent seasons." },
+  { name: 'Jack Nicklaus', active: false, fact: 'Won 18 major championships, still the most in golf history.' },
+  { name: 'Arnold Palmer', active: false, fact: "Helped popularize golf as a television sport and built one of the sport's most beloved followings, \"Arnie's Army.\"" },
+  { name: 'Tiger Woods', active: false, fact: 'Tied the record for career PGA Tour wins and reshaped the sport\'s popularity in the 2000s.' },
+  { name: 'Gary Player', active: false, fact: 'One of only five golfers to complete the career Grand Slam, with a career spanning six decades.' },
+  { name: 'Tom Watson', active: false, fact: 'Eight-time major champion known for his rivalry with Jack Nicklaus in the 1970s and 80s.' },
+  { name: 'Seve Ballesteros', active: false, fact: 'Five-time major champion whose flair and creativity around the greens made him a fan favorite worldwide.' },
+  { name: 'Ben Hogan', active: false, fact: 'Won nine major championships and is remembered for one of the great comebacks in sports, returning to win majors after a near-fatal car accident.' },
+  { name: 'Annika Sorenstam', active: false, fact: 'Won 10 major championships and is widely regarded as one of the greatest women\'s golfers ever.' },
+  { name: 'Mickey Wright', active: false, fact: 'Won 13 major championships and is often cited by peers as having the finest swing in golf history.' },
+  { name: 'Nancy Lopez', active: false, fact: 'Won Rookie of the Year and Player of the Year in the same season, helping popularize the LPGA Tour.' },
+  { name: 'Justin Thomas', active: true, fact: 'Two-time PGA Championship winner known for one of the most explosive swings on tour.' },
+  { name: 'Jordan Spieth', active: true, fact: 'Won three of the four majors before turning 24, missing only the PGA Championship for the career Grand Slam.' },
+  { name: 'Patrick Cantlay', active: true, fact: 'Known for his calm, methodical style and a run as one of the top players in FedEx Cup standings.' },
+  { name: 'Tommy Fleetwood', active: true, fact: 'Ryder Cup mainstay for Europe known for his consistency across major championships.' },
+  { name: 'Brooks Koepka', active: true, fact: 'Won five major championships, with a knack for peaking specifically for golf\'s biggest events.' },
+  { name: 'Hideki Matsuyama', active: true, fact: 'Became the first Japanese man to win a major championship, taking the 2021 Masters.' },
+  { name: 'Collin Morikawa', active: true, fact: 'Won a major in just his second career start at one, a rare feat in modern golf.' },
+  { name: 'Cameron Smith', active: true, fact: 'Known for one of the best short games in golf, highlighted by his 2022 Open Championship win.' },
+  { name: 'Shane Lowry', active: true, fact: 'Won the 2019 Open Championship at Royal Portrush in front of an emotional home crowd in Ireland.' },
+  { name: 'Charley Hull', active: true, fact: 'English standout known for an aggressive playing style and consistent major championship contention.' },
+  { name: 'Jin Young Ko', active: true, fact: 'Spent extended stretches at world No. 1 and is known for one of the most efficient swings in the women\'s game.' },
+  { name: 'Minjee Lee', active: true, fact: 'Multiple major champion known for her long game and consistency on the LPGA Tour.' },
+  { name: 'Brooke Henderson', active: true, fact: 'Canada\'s most successful golfer, with the most LPGA Tour wins by a Canadian in history.' },
+  { name: 'Rose Zhang', active: true, fact: 'Won on her professional debut on the LPGA Tour after a decorated amateur and collegiate career.' },
+  { name: 'Sam Snead', active: false, fact: 'Holds the record for most PGA Tour wins in history, with a career spanning four decades.' },
+  { name: 'Byron Nelson', active: false, fact: 'Won 11 consecutive PGA Tour events in 1945, a record considered untouchable in modern golf.' },
+  { name: 'Walter Hagen', active: false, fact: 'Won 11 major championships and helped elevate professional golfers\' status in the sport\'s early era.' },
+  { name: 'Bobby Jones', active: false, fact: 'Won the Grand Slam of his era as an amateur in 1930, then co-founded Augusta National Golf Club.' },
+  { name: 'Phil Mickelson', active: false, fact: 'Won six major championships and is remembered for thrilling, high-risk shot-making across his career.' },
+  { name: 'Ernie Els', active: false, fact: 'Won four major championships and was known as "The Big Easy" for his smooth swing.' },
+  { name: 'Greg Norman', active: false, fact: 'Spent more weeks at world No. 1 than all but a handful of players in golf history.' },
+  { name: 'Nick Faldo', active: false, fact: 'Won six major championships and later became one of golf\'s most recognizable broadcasters.' },
+  { name: 'Lee Trevino', active: false, fact: 'Won six major championships and was known for his charisma and self-taught playing style.' },
+  { name: 'Babe Zaharias', active: false, fact: 'A founding member of the LPGA who won 10 major championships as one of the great all-around athletes of the 20th century.' },
+  { name: 'Kathy Whitworth', active: false, fact: 'Holds the record for most professional golf tour wins by any player, male or female.' },
+  { name: 'Se Ri Pak', active: false, fact: 'Her 1998 U.S. Women\'s Open win inspired a wave of South Korean golfers who followed her onto the LPGA Tour.' },
+  { name: 'Karrie Webb', active: false, fact: 'Completed the career Grand Slam and the Super Career Grand Slam in women\'s golf.' },
+  { name: 'Louise Suggs', active: false, fact: 'A founding member of the LPGA and winner of 11 major championships.' },
+  { name: 'Sergio García', active: false, fact: 'Broke through for his first major at the 2017 Masters after years as one of the game\'s best without a major title.' },
+  { name: 'Ariya Jutanugarn', active: false, fact: 'Won multiple major championships and spent time at world No. 1 as one of Thailand\'s most successful golfers.' },
+];
+
+const DAILY_PLAYERS_TENNIS = [
+  { name: 'Jannik Sinner', active: true, fact: 'Reached world No. 1 and has established himself among the top Grand Slam contenders on tour.' },
+  { name: 'Carlos Alcaraz', active: true, fact: 'Became the youngest world No. 1 in ATP history at age 19.' },
+  { name: 'Novak Djokovic', active: true, fact: 'Holds the record for most weeks at world No. 1 in ATP history.' },
+  { name: 'Daniil Medvedev', active: true, fact: 'Known for an unorthodox playing style and a Grand Slam title on hard courts.' },
+  { name: 'Alexander Zverev', active: true, fact: 'German star known for one of the biggest serves in the modern men\'s game.' },
+  { name: 'Iga Swiatek', active: true, fact: 'Multiple-time French Open champion known for her dominance on clay.' },
+  { name: 'Coco Gauff', active: true, fact: 'Broke through as a teenager and has since won multiple Grand Slam titles.' },
+  { name: 'Aryna Sabalenka', active: true, fact: 'Known for one of the most powerful games in women\'s tennis and multiple Grand Slam titles.' },
+  { name: 'Elena Rybakina', active: true, fact: 'Wimbledon champion known for one of the most dominant serves on the WTA Tour.' },
+  { name: 'Roger Federer', active: false, fact: 'Won 20 Grand Slam singles titles across a career that redefined the men\'s game.' },
+  { name: 'Rafael Nadal', active: false, fact: 'Won a record 14 French Open titles, earning the nickname "King of Clay."' },
+  { name: 'Pete Sampras', active: false, fact: 'Held the men\'s Grand Slam singles record for years and won a record seven Wimbledon titles among his 14 majors.' },
+  { name: 'Andre Agassi', active: false, fact: 'One of the few men to complete the career Grand Slam, known for his colorful personality and return game.' },
+  { name: 'Björn Borg', active: false, fact: 'Won 11 Grand Slam titles and was part of one of tennis\'s great rivalries with John McEnroe.' },
+  { name: 'Rod Laver', active: false, fact: 'The only player to complete the calendar-year Grand Slam twice, in 1962 and 1969.' },
+  { name: 'Serena Williams', active: false, fact: 'Won 23 Grand Slam singles titles, the most of any player in the Open Era.' },
+  { name: 'Martina Navratilova', active: false, fact: 'Won 18 Grand Slam singles titles and dominated women\'s tennis through the 1980s.' },
+  { name: 'Steffi Graf', active: false, fact: 'The only player, man or woman, to complete a "Golden Slam" — all four majors plus Olympic gold in the same year.' },
+  { name: 'Chris Evert', active: false, fact: 'Won 18 Grand Slam singles titles and was part of a defining rivalry with Martina Navratilova.' },
+  { name: 'Billie Jean King', active: false, fact: 'Won 12 Grand Slam singles titles and became a pioneering figure for equality in professional sports.' },
+  { name: 'Holger Rune', active: true, fact: 'One of the top young players to break into the ATP top 10, known for his aggressive baseline game.' },
+  { name: 'Taylor Fritz', active: true, fact: 'Reached a Grand Slam final and became the top-ranked American man on tour.' },
+  { name: 'Ben Shelton', active: true, fact: 'Known for one of the biggest serves in men\'s tennis and a rapid rise up the ATP rankings.' },
+  { name: 'Casper Ruud', active: true, fact: 'Reached multiple Grand Slam finals, known for his heavy topspin game built for clay.' },
+  { name: 'Stefanos Tsitsipas', active: true, fact: 'Reached the world top 5 and a French Open final with his one-handed backhand and all-court game.' },
+  { name: 'Frances Tiafoe', active: true, fact: 'Known for his energetic playing style and a breakthrough US Open semifinal run.' },
+  { name: 'Jack Draper', active: true, fact: 'British left-hander who broke into the ATP top 10 behind a powerful serve and forehand.' },
+  { name: 'Jessica Pegula', active: true, fact: 'Reached the top of the WTA rankings in doubles and singles, known for her consistent baseline game.' },
+  { name: 'Madison Keys', active: true, fact: 'Won a Grand Slam singles title behind one of the biggest serves in the women\'s game.' },
+  { name: 'Qinwen Zheng', active: true, fact: 'Won Olympic gold in singles and reached a Grand Slam final, becoming a leading Chinese tennis star.' },
+  { name: 'Mirra Andreeva', active: true, fact: 'Broke into the WTA top 10 as a teenager, among the youngest players to do so in recent years.' },
+  { name: 'Jasmine Paolini', active: true, fact: 'Reached both the French Open and Wimbledon finals in the same season, a breakout year for Italian tennis.' },
+  { name: 'John McEnroe', active: false, fact: 'Won seven Grand Slam singles titles and is remembered for his fiery on-court personality and rivalry with Björn Borg.' },
+  { name: 'Jimmy Connors', active: false, fact: 'Won eight Grand Slam singles titles and held the world No. 1 ranking for a record number of consecutive weeks.' },
+  { name: 'Ivan Lendl', active: false, fact: 'Won eight Grand Slam singles titles and helped usher in the modern power-baseline game.' },
+  { name: 'Boris Becker', active: false, fact: 'Won Wimbledon at just 17 years old, still the youngest men\'s champion in tournament history.' },
+  { name: 'Stefan Edberg', active: false, fact: 'Won six Grand Slam singles titles known for his elegant serve-and-volley style.' },
+  { name: 'Andy Murray', active: false, fact: 'Ended a 77-year British drought at Wimbledon and won three Grand Slam singles titles overall.' },
+  { name: 'Stan Wawrinka', active: false, fact: 'Won three Grand Slam titles, each time defeating the world No. 1 in the final.' },
+  { name: 'Justine Henin', active: false, fact: 'Won seven Grand Slam singles titles, known for one of the best one-handed backhands in the women\'s game.' },
+  { name: 'Monica Seles', active: false, fact: 'Won nine Grand Slam singles titles before age 20, one of the most dominant runs in tennis history.' },
+  { name: 'Venus Williams', active: false, fact: 'Won seven Grand Slam singles titles and was a driving force behind equal prize money in tennis.' },
+  { name: 'Maria Sharapova', active: false, fact: 'Completed the career Grand Slam and became one of the most recognizable athletes in the world.' },
+  { name: 'Lindsay Davenport', active: false, fact: 'Won three Grand Slam singles titles and an Olympic gold medal, known for her powerful groundstrokes.' },
+  { name: 'Arantxa Sánchez Vicario', active: false, fact: 'Won four Grand Slam singles titles and was known for her relentless defensive game.' },
+  { name: 'Margaret Court', active: false, fact: 'Holds the record for most Grand Slam singles titles in tennis history, with 24.' },
+  { name: 'Evonne Goolagong', active: false, fact: 'Won seven Grand Slam singles titles and was one of the first Indigenous Australians to reach global sporting stardom.' },
+  { name: 'Grigor Dimitrov', active: true, fact: 'Known for a versatile, classic playing style and a career-high ranking inside the ATP top 3.' },
+  { name: 'Naomi Osaka', active: true, fact: 'Won four Grand Slam singles titles and became one of the highest-profile athletes in the world.' },
+  { name: 'Ashleigh Barty', active: false, fact: 'Reached world No. 1 and won three Grand Slam titles before retiring at the peak of her career in 2022.' },
+];
+
+// Deterministic "today's pick" — same day, same visitor, same player,
+// rotating through the full roster before repeating. Pure date-seeded,
+// no team-repeat logic needed here (unlike nysportsdaily's franchises).
+function getDailyPlayer(pool) {
+  const daysSinceEpoch = Math.floor(Date.now() / 86400000);
+  return pool[daysSinceEpoch % pool.length];
+}
+
 export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
   const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'amateur' | 'tutorials' | 'trivia' | 'tv'
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
+  const [spotlightPhoto, setSpotlightPhoto] = useState(null);
+  const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
 
   const c = SAMPLE[theme];
+
+  const dailyPlayerPool = theme === 'golf' ? DAILY_PLAYERS_GOLF : DAILY_PLAYERS_TENNIS;
+  const dailyPlayer = getDailyPlayer(dailyPlayerPool);
+
+  // Self-healing photo layer, ported from nysportsdaily: search Wikipedia
+  // by name rather than trust a stored URL, so this never breaks even if
+  // a page gets renamed. Falls back to no photo (gradient block) silently.
+  useEffect(() => {
+    let cancelled = false;
+    setSpotlightPhoto(null);
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(dailyPlayer.name)}&format=json&origin=*&srlimit=1`;
+    fetch(searchUrl)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return null;
+        const title = data?.query?.search?.[0]?.title;
+        if (!title) return null;
+        return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+      })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((summary) => {
+        if (!cancelled && summary?.thumbnail?.source) setSpotlightPhoto(summary.thumbnail.source);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [dailyPlayer.name]);
+
+  // Live news via Google News RSS, parsed client-side through rss2json —
+  // same working pattern as nysportsdaily's GoogleNewsSection. Falls back
+  // to sample headlines if the fetch fails or comes back empty.
+  useEffect(() => {
+    let cancelled = false;
+    setLiveNews(null);
+    const query = theme === 'golf' ? '"PGA Tour" OR "LPGA" golf' : '"ATP" OR "WTA" tennis';
+    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=8`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.status === 'ok' && data.items?.length) {
+          setLiveNews(data.items.map((item) => {
+            const cleanTitle = item.title?.replace(/\s*-\s*[^-]+$/, '').trim() || item.title;
+            const source = item.author || item.title?.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
+            return {
+              title: cleanTitle,
+              source,
+              link: `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=en-US`,
+            };
+          }));
+        } else {
+          setLiveNews([]);
+        }
+      })
+      .catch(() => { if (!cancelled) setLiveNews([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
 
   // Try live data first; fall back to sample rows if the table's empty
   // (e.g. before the first weekly pull has run) or the query fails.
@@ -222,11 +400,15 @@ export default function App() {
         <section>
           <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
           <div className="spotlight">
-            <div className="spotlight-photo" />
+            <div
+              className="spotlight-photo"
+              style={spotlightPhoto ? { backgroundImage: `url(${spotlightPhoto})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+            />
             <div>
-              <div className="spotlight-eyebrow">{c.spotlight.eyebrow}</div>
-              <h3>{c.spotlight.headline}</h3>
-              <p>{c.spotlight.body}</p>
+              <div className="spotlight-eyebrow">{dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}</div>
+              <h3>{dailyPlayer.name}</h3>
+              <p>{dailyPlayer.fact}</p>
+              {eventLinks(dailyPlayer.name)}
             </div>
           </div>
         </section>
@@ -335,24 +517,50 @@ export default function App() {
 
         <section>
           <div className="section-head"><span className="section-title">Latest News</span></div>
-          <div className="top-story">
-            <div className="thumb-large" />
-            <div>
-              <span className="badge">TOP STORY</span>
-              <h4>{c.topStory.title}</h4>
-              <p>{c.topStory.dek}</p>
-              <div className="src">{c.topStory.src}</div>
-            </div>
-          </div>
-          <div className="news-grid">
-            {c.news.map((n) => (
-              <div className="news-item" key={n[0]}>
-                <div className="thumb" />
-                <h5>{n[0]}</h5>
-                <div className="src">{n[1]}</div>
-              </div>
-            ))}
-          </div>
+          {(() => {
+            const useLive = liveNews && liveNews.length > 0;
+            const top = useLive ? liveNews[0] : null;
+            const rest = useLive ? liveNews.slice(1, 5) : c.news;
+            return (
+              <>
+                <div className="top-story">
+                  <div className="thumb-large" />
+                  <div>
+                    <span className="badge">TOP STORY</span>
+                    {useLive ? (
+                      <>
+                        <h4><a href={top.link} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>{top.title}</a></h4>
+                        <div className="src">{top.source}</div>
+                      </>
+                    ) : (
+                      <>
+                        <h4>{c.topStory.title}</h4>
+                        <p>{c.topStory.dek}</p>
+                        <div className="src">{c.topStory.src}</div>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="news-grid">
+                  {useLive
+                    ? rest.map((n) => (
+                        <div className="news-item" key={n.link}>
+                          <div className="thumb" />
+                          <h5><a href={n.link} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>{n.title}</a></h5>
+                          <div className="src">{n.source}</div>
+                        </div>
+                      ))
+                    : rest.map((n) => (
+                        <div className="news-item" key={n[0]}>
+                          <div className="thumb" />
+                          <h5>{n[0]}</h5>
+                          <div className="src">{n[1]}</div>
+                        </div>
+                      ))}
+                </div>
+              </>
+            );
+          })()}
         </section>
 
         <section>
