@@ -367,10 +367,18 @@ export default function App() {
       .filter((t) => t.next > now)
       .sort((a, b) => a.next - b.next)[0];
 
+    // Full schedule: every match still ahead of now, across all
+    // tournaments, soonest first — feeds the dedicated Schedule tab.
+    const scheduleMatches = liveMatches
+      .filter((m) => new Date(m.match_date).getTime() > now)
+      .sort((a, b) => new Date(a.match_date) - new Date(b.match_date))
+      .slice(0, 60);
+
     return {
       now: { name: current, meta: nowMeta },
       next: upcoming ? { name: upcoming.name, meta: 'Draw building' } : null,
       results,
+      schedule: scheduleMatches,
     };
   }, [liveMatches]);
 
@@ -558,6 +566,7 @@ export default function App() {
           <div className="tabs-nav">
             {[
               ['rankings', 'Rankings'],
+              ['schedule', 'Schedule'],
               ['majors', 'Majors & History'],
               ['amateur', 'Amateur'],
               ['tutorials', 'Tutorials'],
@@ -831,6 +840,45 @@ export default function App() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {view === 'schedule' && (
+        <div className="wrap">
+          <div className="page-header">
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <h2>Upcoming Schedule</h2>
+          </div>
+          {theme === 'tennis' && tourneyLive?.schedule?.length > 0 ? (
+            <ul className="results-list">
+              {tourneyLive.schedule.map((m) => {
+                const when = m.match_date
+                  ? new Date(m.match_date).toLocaleString(undefined, {
+                      weekday: 'short', month: 'short', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    })
+                  : 'Time TBD';
+                return (
+                  <li key={m.espn_id}>
+                    <div className="result-main">
+                      <span className="who">{m.player1 && m.player2 ? `${m.player1} vs ${m.player2}` : m.tournament_name}</span>
+                      <span className="what">
+                        {m.tournament_name}{m.round ? ` · ${m.round}` : ''}{m.court ? ` · ${m.court}` : ''} · {when}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="coming-soon">
+              <p>
+                {theme === 'golf'
+                  ? "Golf schedule data hasn't been built yet — tennis matches are live, golf tournament scheduling is a similar build for later."
+                  : 'No upcoming matches loaded yet — check back after the next data pull.'}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
