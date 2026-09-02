@@ -254,31 +254,45 @@ export default function App() {
     return () => { cancelled = true; };
   }, [dailyPlayer.name]);
 
-  // Live news via Google News RSS, parsed client-side through rss2json —
-  // same working pattern as nysportsdaily's GoogleNewsSection. Falls back
-  // to sample headlines if the fetch fails or comes back empty.
+  // Live news via Google News RSS. Parsed directly as XML through the
+  // allorigins.win proxy (same CORS-proxy pattern used elsewhere in the
+  // site family) rather than rss2json — rss2json's free/no-key tier is
+  // heavily rate-limited for feeds it hasn't cached before ("You are
+  // converting new feeds in a very short period, please use an API
+  // key"), which is exactly our situation. Parsing the XML ourselves
+  // with the browser's built-in DOMParser avoids that dependency and
+  // its rate limit entirely. Falls back to sample headlines if the
+  // fetch fails or comes back empty.
   useEffect(() => {
     let cancelled = false;
     setLiveNews(null);
     const query = theme === 'golf' ? '"PGA Tour" OR "LPGA" golf' : '"ATP" OR "WTA" tennis';
     const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
-    fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=8`)
-      .then((r) => r.json())
-      .then((data) => {
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
+    fetch(proxyUrl)
+      .then((r) => r.text())
+      .then((xmlText) => {
         if (cancelled) return;
-        if (data.status === 'ok' && data.items?.length) {
-          setLiveNews(data.items.map((item) => {
-            const cleanTitle = item.title?.replace(/\s*-\s*[^-]+$/, '').trim() || item.title;
-            const source = item.author || item.title?.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
-            return {
-              title: cleanTitle,
-              source,
-              link: `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=en-US`,
-            };
-          }));
-        } else {
+        const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+        const items = Array.from(doc.querySelectorAll('item')).slice(0, 8);
+        if (!items.length) {
           setLiveNews([]);
+          return;
         }
+        setLiveNews(items.map((item) => {
+          const rawTitle = item.querySelector('title')?.textContent || '';
+          // Google News titles come as "Headline - Source Name" — split
+          // the source out using the <source> tag when present, falling
+          // back to the trailing " - X" pattern in the title itself.
+          const sourceTag = item.querySelector('source')?.textContent;
+          const cleanTitle = rawTitle.replace(/\s*-\s*[^-]+$/, '').trim() || rawTitle;
+          const source = sourceTag || rawTitle.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
+          return {
+            title: cleanTitle,
+            source,
+            link: `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=en-US`,
+          };
+        }));
       })
       .catch(() => { if (!cancelled) setLiveNews([]); });
     return () => { cancelled = true; };
