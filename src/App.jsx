@@ -662,10 +662,27 @@ export default function App() {
             </div>
             <div className="tourney-card">
               <div className="label">Up Next</div>
-              <h4>{tourneyLive?.next?.name || c.tourneyNext.name}</h4>
-              <div className="meta">{tourneyLive?.next?.meta || c.tourneyNext.meta}</div>
-              {eventLinks(tourneyLive?.next?.name || c.tourneyNext.name)}
-              {!tourneyLive && c.tourneyNext.course && <div className="course-line">{c.tourneyNext.course}</div>}
+              {tourneyLive ? (
+                tourneyLive.next ? (
+                  <>
+                    <h4>{tourneyLive.next.name}</h4>
+                    <div className="meta">{tourneyLive.next.meta}</div>
+                    {eventLinks(tourneyLive.next.name)}
+                  </>
+                ) : (
+                  <>
+                    <h4>TBD</h4>
+                    <div className="meta">No further tournament scheduled in current data yet</div>
+                  </>
+                )
+              ) : (
+                <>
+                  <h4>{c.tourneyNext.name}</h4>
+                  <div className="meta">{c.tourneyNext.meta}</div>
+                  {eventLinks(c.tourneyNext.name)}
+                  {c.tourneyNext.course && <div className="course-line">{c.tourneyNext.course}</div>}
+                </>
+              )}
             </div>
           </div>
         </section>
