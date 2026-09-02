@@ -20,8 +20,10 @@
 // reuses it.)
 
 import { createClient } from '@supabase/supabase-js';
+import * as cheerio from 'cheerio';
 
 const ESPN_BASE = 'https://sports.core.api.espn.com/v2/sports';
+const ROLEX_RANKINGS_URL = 'https://www.rolexrankings.com/rankings';
 
 async function mapWithLimit(items, limit, fn) {
   const results = new Array(items.length);
@@ -110,6 +112,54 @@ async function fetchGolfWorldRankings(season = new Date().getFullYear()) {
   return withNames.filter(Boolean);
 }
 
+// ---------------------------------------------------------------------
+// Golf: Women's World Ranking (Rolex Rankings — the official source
+// directly, not ESPN, since ESPN doesn't appear to carry this list).
+// Real, clean, server-rendered HTML table — no JS-rendering workaround
+// needed, unlike the LPGA's own site.
+// ---------------------------------------------------------------------
+async function fetchWomensGolfRankings() {
+  const res = await fetch(ROLEX_RANKINGS_URL, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GolfTennisWeeklyBot/1.0)' },
+  });
+  if (!res.ok) throw new Error(`Rolex Rankings fetch failed (${res.status})`);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // Pull "Rankings as of YYYY-MM-DD" from the page heading as the real
+  // source-of-truth date, rather than guessing today's date.
+  const headingText = $('h1, h2').filter((_, el) => /Rankings as of/i.test($(el).text())).first().text();
+  const dateMatch = headingText.match(/(\d{4}-\d{2}-\d{2})/);
+  const weekOf = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
+
+  const rows = [];
+  // The rankings table's rows — first table on the page is the rankings
+  // list. Column order: rank, change, country, player, avg points,
+  // total points, events played.
+  $('table').first().find('tbody tr').each((_, tr) => {
+    const cells = $(tr).find('td');
+    if (cells.length < 6) return;
+    const rank = parseInt($(cells[0]).text().trim(), 10);
+    const playerName = $(cells[3]).find('a').first().text().trim() || $(cells[3]).text().trim();
+    const totalPoints = parseFloat($(cells[5]).text().trim());
+    if (!rank || !playerName) return;
+    rows.push({
+      sport: 'golf',
+      tour: 'rolex',
+      week_of: weekOf,
+      rank,
+      player_name: playerName,
+      points: isNaN(totalPoints) ? null : totalPoints,
+      source: 'primary',
+    });
+  });
+
+  // NOTE: the page currently shows the top 50 only — no pagination link
+  // was confirmed during research. Worth revisiting to extend past 50
+  // once the real page structure can be inspected for a page-2 pattern.
+  return rows;
+}
+
 async function upsertRows(supabase, rows) {
   if (rows.length === 0) return;
   const CHUNK = 200;
@@ -158,6 +208,14 @@ export default async function handler(req, res) {
     summary.golf = rows.length;
   } catch (err) {
     summary.errors.push(`golf: ${err.message}`);
+  }
+
+  try {
+    const rows = await fetchWomensGolfRankings();
+    allRows.push(...rows);
+    summary.golf_women = rows.length;
+  } catch (err) {
+    summary.errors.push(`golf_women: ${err.message}`);
   }
 
   try {
