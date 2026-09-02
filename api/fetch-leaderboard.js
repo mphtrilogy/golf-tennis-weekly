@@ -18,8 +18,19 @@ async function fetchLeaderboardForTour(tour) {
   if (!res.ok) throw new Error(`ESPN golf scoreboard fetch failed (${res.status}) for ${tour}`);
   const data = await res.json();
 
+  // Next scheduled event from ESPN's own calendar — captured regardless
+  // of whether a tournament is actively playing right now, so a
+  // mid-season gap (e.g. between the Tour Championship and the next
+  // fall event) still has something real to show instead of nothing.
+  const calendar = data.leagues?.[0]?.calendar || [];
+  const now = Date.now();
+  const upcoming = calendar
+    .filter((e) => new Date(e.startDate).getTime() > now)
+    .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))[0];
+  const nextEvent = upcoming ? { event_name: upcoming.label, start_date: upcoming.startDate } : null;
+
   const event = data.events?.[0];
-  if (!event) return [];
+  if (!event) return { rows: [], nextEvent };
 
   const tournamentName = event.name;
   const tournamentId = event.id;
@@ -39,7 +50,7 @@ async function fetchLeaderboardForTour(tour) {
     score_to_par: c.score ?? null,
   })).filter((r) => r.player_name);
 
-  return rows;
+  return { rows, nextEvent };
 }
 
 async function replaceRowsForTour(supabase, tour, rows) {
@@ -50,6 +61,14 @@ async function replaceRowsForTour(supabase, tour, rows) {
   if (delErr) throw new Error(`Supabase delete failed for ${tour}: ${delErr.message}`);
   const { error: insErr } = await supabase.from('gtw_leaderboard').insert(rows);
   if (insErr) throw new Error(`Supabase insert failed for ${tour}: ${insErr.message}`);
+}
+
+async function upsertNextEvent(supabase, tour, nextEvent) {
+  if (!nextEvent) return;
+  const { error } = await supabase
+    .from('gtw_next_event')
+    .upsert({ sport: 'golf', tour, ...nextEvent }, { onConflict: 'sport,tour' });
+  if (error) throw new Error(`Supabase next_event upsert failed for ${tour}: ${error.message}`);
 }
 
 export default async function handler(req, res) {
@@ -70,9 +89,22 @@ export default async function handler(req, res) {
 
   for (const tour of ['pga', 'lpga']) {
     try {
-      const rows = await fetchLeaderboardForTour(tour);
-      await replaceRowsForTour(supabase, tour, rows);
-      summary[tour] = rows.length;
+      const { rows, nextEvent } = await fetchLeaderboardForTour(tour);
+
+      // Next-event info updates independently of the player-row safety
+      // check — it's useful even when there's nothing currently playing.
+      try {
+        await upsertNextEvent(supabase, tour, nextEvent);
+      } catch (err) {
+        summary.errors.push(`${tour} next_event: ${err.message}`);
+      }
+
+      if (rows.length > 0) {
+        await replaceRowsForTour(supabase, tour, rows);
+        summary[tour] = rows.length;
+      } else {
+        summary.errors.push(`${tour}: no active tournament right now (calendar gap)`);
+      }
     } catch (err) {
       summary.errors.push(`${tour}: ${err.message}`);
     }
