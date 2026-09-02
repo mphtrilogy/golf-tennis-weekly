@@ -119,14 +119,17 @@ async function fetchGolfWorldRankings(season = new Date().getFullYear()) {
 // needed, unlike the LPGA's own site.
 // ---------------------------------------------------------------------
 async function fetchWomensGolfRankings() {
-  const res = await fetch(ROLEX_RANKINGS_URL, {
+  // Vercel's own IP range appears to be blocked by Rolex Rankings'
+  // hosting-provider bot protection (headers alone didn't fix it) —
+  // routing through the same CORS-proxy trick already used elsewhere
+  // in the site family, since it fetches from a different origin.
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ROLEX_RANKINGS_URL)}`;
+  const res = await fetch(proxyUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
     },
   });
-  if (!res.ok) throw new Error(`Rolex Rankings fetch failed (${res.status})`);
+  if (!res.ok) throw new Error(`Rolex Rankings fetch failed via proxy (${res.status})`);
   const html = await res.text();
   const $ = cheerio.load(html);
 
