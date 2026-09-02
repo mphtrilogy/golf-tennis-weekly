@@ -254,45 +254,32 @@ export default function App() {
     return () => { cancelled = true; };
   }, [dailyPlayer.name]);
 
-  // Live news via Google News RSS. Parsed directly as XML through the
-  // allorigins.win proxy (same CORS-proxy pattern used elsewhere in the
-  // site family) rather than rss2json — rss2json's free/no-key tier is
-  // heavily rate-limited for feeds it hasn't cached before ("You are
-  // converting new feeds in a very short period, please use an API
-  // key"), which is exactly our situation. Parsing the XML ourselves
-  // with the browser's built-in DOMParser avoids that dependency and
-  // its rate limit entirely. Falls back to sample headlines if the
-  // fetch fails or comes back empty.
+  // News is now fetched server-side (api/fetch-news.js, on a daily cron)
+  // and stored in Supabase — no client-side CORS proxy involved at all,
+  // after two different free proxy services (rss2json, allorigins.win)
+  // both proved too unreliable for daily production use. This just
+  // reads whatever the server-side job has already gathered, same
+  // pattern as the rankings fetch.
   useEffect(() => {
     let cancelled = false;
     setLiveNews(null);
-    const query = theme === 'golf' ? '"PGA Tour" OR "LPGA" golf' : '"ATP" OR "WTA" tennis';
-    const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
-    fetch(proxyUrl)
-      .then((r) => r.text())
-      .then((xmlText) => {
+    supabase
+      .from('gtw_news')
+      .select('*')
+      .eq('sport', theme)
+      .order('published_at', { ascending: false })
+      .limit(8)
+      .then(({ data, error }) => {
         if (cancelled) return;
-        const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-        const items = Array.from(doc.querySelectorAll('item')).slice(0, 8);
-        if (!items.length) {
+        if (error || !data || data.length === 0) {
           setLiveNews([]);
           return;
         }
-        setLiveNews(items.map((item) => {
-          const rawTitle = item.querySelector('title')?.textContent || '';
-          // Google News titles come as "Headline - Source Name" — split
-          // the source out using the <source> tag when present, falling
-          // back to the trailing " - X" pattern in the title itself.
-          const sourceTag = item.querySelector('source')?.textContent;
-          const cleanTitle = rawTitle.replace(/\s*-\s*[^-]+$/, '').trim() || rawTitle;
-          const source = sourceTag || rawTitle.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
-          return {
-            title: cleanTitle,
-            source,
-            link: `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=en-US`,
-          };
-        }));
+        setLiveNews(data.map((row) => ({
+          title: row.title,
+          source: row.source || 'Google News',
+          link: row.link,
+        })));
       })
       .catch(() => { if (!cancelled) setLiveNews([]); });
     return () => { cancelled = true; };
