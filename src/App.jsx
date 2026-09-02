@@ -464,12 +464,19 @@ export default function App() {
           setLiveNews([]);
           return;
         }
-        setLiveNews(data.map((row) => ({
+        const mapped = data.map((row) => ({
           title: row.title,
           source: row.source || 'Google News',
           link: row.link,
           image: row.image_url || null,
-        })));
+        }));
+        // Image-bearing rows always lead (they came from the fetch's
+        // "featured" pass) so the top-5 photo slots are never left
+        // empty by a fast-moving no-image headline outranking them on
+        // pure recency. Relative order within each group is preserved.
+        const withImage = mapped.filter((n) => n.image);
+        const withoutImage = mapped.filter((n) => !n.image);
+        setLiveNews([...withImage, ...withoutImage]);
       })
       .catch(() => { if (!cancelled) setLiveNews([]); });
     return () => { cancelled = true; };
