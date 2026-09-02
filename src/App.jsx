@@ -123,7 +123,7 @@ export default function App() {
           .eq('sport', theme)
           .order('week_of', { ascending: false })
           .order('rank', { ascending: true })
-          .limit(300);
+          .limit(2000);
         if (error) throw error;
         if (!cancelled) setLiveRankings(data && data.length ? data : []);
       } catch (err) {
@@ -135,16 +135,51 @@ export default function App() {
     return () => { cancelled = true; };
   }, [theme]);
 
+  // Which tour codes belong to which column, per sport — matches the
+  // order of c.rankCols (men's tour first, women's second).
+  const TOUR_BY_SPORT = { golf: ['owgr', 'rolex'], tennis: ['atp', 'wta'] };
+
+  // Group the raw fetched rows into per-tour columns using only the
+  // most recent week_of for that tour. Returns null per column until
+  // that tour actually has data (e.g. women's golf/Rolex, not fetched
+  // yet) — the render below falls back to sample data for that column
+  // specifically, so one missing tour doesn't blank out the whole page.
+  const liveColumnsBySport = useMemo(() => {
+    if (!liveRankings || liveRankings.length === 0) return null;
+    const tours = TOUR_BY_SPORT[theme] || [];
+    return tours.map((tour) => {
+      const rowsForTour = liveRankings.filter((r) => r.tour === tour);
+      if (rowsForTour.length === 0) return null;
+      const latestWeek = rowsForTour.reduce(
+        (max, r) => (r.week_of > max ? r.week_of : max),
+        rowsForTour[0].week_of
+      );
+      const thisWeek = rowsForTour
+        .filter((r) => r.week_of === latestWeek)
+        .sort((a, b) => a.rank - b.rank);
+      // Movement (d) is 0/flat until a second week's snapshot exists to
+      // diff against — this is the very first pull, so there's nothing
+      // to compare yet. Once next Tuesday's cron run lands, real deltas
+      // take over automatically.
+      return thisWeek.map((r) => ({ n: r.player_name, d: 0, h: null }));
+    });
+  }, [liveRankings, theme]);
+
   const rankColumnsHome = useMemo(() => {
-    // Once live rows exist, this is where they'd be grouped by tour
-    // into the same [{n, d, h}] shape the sample data already uses —
-    // left as sample fallback until gtw_rankings_snapshots is seeded.
-    return c.rankBase.map((base) => extendRankings(base, 25).slice(0, 5));
-  }, [c]);
+    return c.rankBase.map((base, i) => {
+      const live = liveColumnsBySport && liveColumnsBySport[i];
+      if (live && live.length > 0) return live.slice(0, 5);
+      return extendRankings(base, 25).slice(0, 5);
+    });
+  }, [c, liveColumnsBySport]);
 
   const rankColumnsFull = useMemo(() => {
-    return c.rankBase.map((base) => extendRankings(base, 100));
-  }, [c]);
+    return c.rankBase.map((base, i) => {
+      const live = liveColumnsBySport && liveColumnsBySport[i];
+      if (live && live.length > 0) return live.slice(0, 100);
+      return extendRankings(base, 100);
+    });
+  }, [c, liveColumnsBySport]);
 
   return (
     <div data-theme={theme}>
