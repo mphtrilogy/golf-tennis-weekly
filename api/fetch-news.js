@@ -87,18 +87,63 @@ async function fetchOneFeed(url, sport) {
   return rows;
 }
 
+// Google News gives real breadth (many outlets, not just one publisher)
+// but no images at all, and its <link> is a wrapped redirect that only
+// resolves inside a real browser. Neither problem matters here — this
+// only feeds the long text list, which never shows images, and linking
+// to a Google search for the headline (rather than the raw redirect)
+// sidesteps the resolution issue entirely. Same safe pattern already
+// used elsewhere in the site family.
+async function fetchGoogleNewsBreadth(sport) {
+  const query = sport === 'golf' ? '"PGA Tour" OR "LPGA" golf' : '"ATP" OR "WTA" tennis';
+  const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+  const res = await fetch(rssUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+  });
+  if (!res.ok) return [];
+  const xml = await res.text();
+  const $ = cheerio.load(xml, { xmlMode: true });
+
+  const rows = [];
+  $('item').slice(0, 20).each((_, el) => {
+    const rawTitle = $(el).find('title').first().text().trim();
+    const pubDate = $(el).find('pubDate').first().text().trim();
+    const sourceTag = $(el).find('source').first().text().trim();
+    if (!rawTitle) return;
+    const cleanTitle = rawTitle.replace(/\s*-\s*[^-]+$/, '').trim() || rawTitle;
+    const source = sourceTag || rawTitle.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
+    rows.push({
+      sport,
+      title: cleanTitle,
+      source,
+      link: `https://news.google.com/search?q=${encodeURIComponent(cleanTitle)}&hl=en-US`,
+      published_at: pubDate ? new Date(pubDate).toISOString() : null,
+      image_url: null,
+    });
+  });
+  return rows;
+}
+
 async function fetchNewsForSport(sport) {
+  let featured = [];
   let lastErr = null;
   for (const url of FEEDS[sport]) {
     try {
       const rows = await fetchOneFeed(url, sport);
-      if (rows.length > 0) return dedupeByTitle(rows);
+      if (rows.length > 0) { featured = dedupeByTitle(rows); break; }
     } catch (err) {
       lastErr = err;
     }
   }
-  if (lastErr) throw lastErr;
-  throw new Error(`All feeds for ${sport} returned zero items`);
+  if (featured.length === 0 && lastErr) throw lastErr;
+  if (featured.length === 0) throw new Error(`All feeds for ${sport} returned zero items`);
+
+  const breadth = await fetchGoogleNewsBreadth(sport).catch(() => []);
+  // Featured (image-bearing) items always lead, so the top-5 photo
+  // slots never end up empty — breadth items fill out the long list.
+  const featuredTitles = new Set(featured.map((r) => r.title));
+  const extra = dedupeByTitle(breadth).filter((r) => !featuredTitles.has(r.title));
+  return [...featured, ...extra];
 }
 
 function dedupeByTitle(rows) {
