@@ -9,9 +9,59 @@
 // requests. This replaced an earlier client-side version that depended
 // on free CORS-proxy services (allorigins.win, rss2json) which both
 // turned out too unreliable for daily production use.
+//
+// Also pulls each article's og:image (the same meta tag every site sets
+// so its links look right on social media) for real thumbnails — Google
+// News' RSS feed itself carries no images at all, so this is the only
+// way to get real photos rather than blank placeholder blocks.
 
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
+
+// Extend past the 10s default — fetching ~20 article pages for images
+// needs more headroom, even running several at once.
+export const config = { maxDuration: 45 };
+
+async function mapWithLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: limit }, worker));
+  return results;
+}
+
+// Fetches an article's page and pulls its og:image. Individually
+// timed-out and try/caught so one slow or blocking site never stalls
+// the whole batch — missing image just means no thumbnail, not a
+// failed run.
+async function fetchOgImage(url) {
+  if (!url) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36' },
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const image =
+      $('meta[property="og:image"]').attr('content') ||
+      $('meta[name="twitter:image"]').attr('content') ||
+      null;
+    return image || null;
+  } catch {
+    return null;
+  }
+}
 
 async function fetchNewsForSport(sport) {
   const query = sport === 'golf' ? '"PGA Tour" OR "LPGA" golf' : '"ATP" OR "WTA" tennis';
@@ -24,7 +74,7 @@ async function fetchNewsForSport(sport) {
   const xml = await res.text();
   const $ = cheerio.load(xml, { xmlMode: true });
 
-  const rows = [];
+  const basicRows = [];
   $('item').slice(0, 10).each((_, el) => {
     const rawTitle = $(el).find('title').first().text();
     const link = $(el).find('link').first().text();
@@ -36,16 +86,16 @@ async function fetchNewsForSport(sport) {
     const source = sourceTag || rawTitle.match(/\s*-\s*([^-]+)$/)?.[1]?.trim() || 'Google News';
     const publishedAt = pubDate ? new Date(pubDate).toISOString() : null;
 
-    rows.push({
-      sport,
-      title: cleanTitle,
-      source,
-      link,
-      published_at: publishedAt,
-    });
+    basicRows.push({ sport, title: cleanTitle, source, link, published_at: publishedAt });
   });
 
-  return rows;
+  // Fetch og:image for each article, 5 at a time.
+  const withImages = await mapWithLimit(basicRows, 5, async (row) => ({
+    ...row,
+    image_url: await fetchOgImage(row.link),
+  }));
+
+  return withImages;
 }
 
 async function upsertRows(supabase, rows) {
