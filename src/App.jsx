@@ -223,6 +223,37 @@ function getDailyPlayer(pool) {
 // it doesn't wander into later templates on the page.
 // Deterministic "dispatch number" from a name, purely decorative —
 // same flavor as The Scouting Report's card numbering.
+// Reusable version of the Daily Spotlight photo trick — search Wikipedia
+// by name, pull the summary thumbnail. Used for the home page's
+// real-player cards (#1 men's, #1 women's, hottest riser), which each
+// need their own independent photo lookup by whatever name lands there.
+function PlayerCardAvatar({ name }) {
+  const [photo, setPhoto] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setPhoto(null);
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(name)}&format=json&origin=*&srlimit=1`;
+    fetch(searchUrl)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return null;
+        const title = data?.query?.search?.[0]?.title;
+        if (!title) return null;
+        return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+      })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((summary) => {
+        if (!cancelled && summary?.thumbnail?.source) setPhoto(summary.thumbnail.source);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [name]);
+
+  return photo
+    ? <img className="avatar" src={photo} alt="" style={{ objectFit: 'cover' }} />
+    : <div className="avatar" />;
+}
+
 function dispatchNumber(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
@@ -924,7 +955,7 @@ export default function App() {
               const q = encodeURIComponent(name);
               return (
                 <div className="player-card" key={i}>
-                  <div className="avatar" />
+                  {slot.real ? <PlayerCardAvatar name={name} /> : <div className="avatar" />}
                   <div className="name">{name}</div>
                   <div className="rank">{tag}</div>
                   <div className="player-links">
