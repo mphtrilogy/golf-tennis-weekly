@@ -403,8 +403,43 @@ export default function App() {
     return () => { cancelled = true; };
   }, [theme]);
 
+  const [liveNextEvent, setLiveNextEvent] = useState(null);
+
+  useEffect(() => {
+    if (theme !== 'golf') { setLiveNextEvent([]); return; }
+    let cancelled = false;
+    setLiveNextEvent(null);
+    supabase
+      .from('gtw_next_event')
+      .select('*')
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLiveNextEvent(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setLiveNextEvent([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
+
   const golfLive = useMemo(() => {
-    if (!liveLeaderboard || liveLeaderboard.length === 0) return null;
+    const nextFromCalendar = () => {
+      if (!liveNextEvent || liveNextEvent.length === 0) return null;
+      const soonest = [...liveNextEvent].sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0];
+      if (!soonest) return null;
+      const when = soonest.start_date
+        ? new Date(soonest.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        : null;
+      return { name: soonest.event_name, meta: when ? `Starts ${when}` : 'Date TBD' };
+    };
+
+    if (!liveLeaderboard || liveLeaderboard.length === 0) {
+      // No active tournament right now (a real calendar gap, not a
+      // fetch failure) — still show the real next scheduled event
+      // rather than falling all the way back to fabricated sample data.
+      const next = nextFromCalendar();
+      if (!next) return null;
+      return { now: { name: 'No Tournament In Progress', meta: 'Between events' }, next, leaderboardRows: [] };
+    }
+
     const byTour = { pga: [], lpga: [] };
     for (const row of liveLeaderboard) (byTour[row.tour] ||= []).push(row);
 
@@ -421,10 +456,10 @@ export default function App() {
 
     return {
       now: pga || lpga,
-      next: pga && lpga && lpga.name !== pga.name ? lpga : null,
+      next: (pga && lpga && lpga.name !== pga.name) ? lpga : nextFromCalendar(),
       leaderboardRows: (pga || lpga)?.rows.slice(0, 15) || [],
     };
-  }, [liveLeaderboard]);
+  }, [liveLeaderboard, liveNextEvent]);
 
   const activeLive = theme === 'tennis' ? tourneyLive : golfLive;
 
@@ -740,19 +775,25 @@ export default function App() {
             </span>
           </div>
           {theme === 'golf' && golfLive ? (
-            <ul className="results-list">
-              {golfLive.leaderboardRows.map((row) => (
-                <li key={row.player_name}>
-                  <div className="result-main">
-                    <span className="who">
-                      {row.position != null ? `${row.position}. ` : ''}{row.player_name}
-                      <span className="delta flat" style={{ marginLeft: 8 }}>{row.score_to_par ?? '—'}</span>
-                    </span>
-                    {eventLinks(row.player_name)}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            golfLive.leaderboardRows.length > 0 ? (
+              <ul className="results-list">
+                {golfLive.leaderboardRows.map((row) => (
+                  <li key={row.player_name}>
+                    <div className="result-main">
+                      <span className="who">
+                        {row.position != null ? `${row.position}. ` : ''}{row.player_name}
+                        <span className="delta flat" style={{ marginLeft: 8 }}>{row.score_to_par ?? '—'}</span>
+                      </span>
+                      {eventLinks(row.player_name)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="coming-soon">
+                <p>No tournament in progress right now — check back once the next event's field is set.</p>
+              </div>
+            )
           ) : (
             <ul className="results-list">
               {tourneyLive?.results.length > 0
