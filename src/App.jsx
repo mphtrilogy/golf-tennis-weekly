@@ -468,6 +468,7 @@ export default function App() {
           title: row.title,
           source: row.source || 'Google News',
           link: row.link,
+          image: row.image_url || null,
         })));
       })
       .catch(() => { if (!cancelled) setLiveNews([]); });
@@ -769,7 +770,11 @@ export default function App() {
             return (
               <>
                 <div className="top-story">
-                  <div className="thumb-large" />
+                  {useLive && top.image ? (
+                    <img className="thumb-large" src={top.image} alt="" />
+                  ) : (
+                    <div className="thumb-large" />
+                  )}
                   <div>
                     <span className="badge">TOP STORY</span>
                     {useLive ? (
@@ -790,7 +795,7 @@ export default function App() {
                   {useLive
                     ? rest.map((n) => (
                         <div className="news-item" key={n.link}>
-                          <div className="thumb" />
+                          {n.image ? <img className="thumb" src={n.image} alt="" /> : <div className="thumb" />}
                           <h5><a href={n.link} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>{n.title}</a></h5>
                           <div className="src">{n.source}</div>
                         </div>
