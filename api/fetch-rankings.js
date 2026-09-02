@@ -117,14 +117,19 @@ async function upsertRows(supabase, rows) {
     const chunk = rows.slice(i, i + CHUNK);
     const { error } = await supabase
       .from('gtw_rankings_snapshots')
-      .upsert(chunk, { onConflict: 'sport,tour,week_of,rank' });
+      .upsert(chunk, { onConflict: 'sport,tour,week_of,player_name' });
     if (error) throw new Error(`Supabase upsert failed: ${error.message}`);
   }
 }
 
 export default async function handler(req, res) {
-  if (req.query.secret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized — missing or wrong ?secret=' });
+  // Vercel Cron Jobs automatically send this header when CRON_SECRET is
+  // set — that's the real, automated trigger path. The ?secret= query
+  // param still works too, kept around for manual testing in a browser.
+  const cronAuth = req.headers['authorization'] === `Bearer ${process.env.CRON_SECRET}`;
+  const manualAuth = req.query.secret === process.env.CRON_SECRET;
+  if (!cronAuth && !manualAuth) {
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
