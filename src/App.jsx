@@ -436,6 +436,59 @@ export default function App() {
 
   const [liveNextEvent, setLiveNextEvent] = useState(null);
 
+  const [liveMajors, setLiveMajors] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setLiveMajors(null);
+    supabase
+      .from('gtw_majors')
+      .select('*')
+      .eq('sport', theme)
+      .order('start_date', { ascending: true, nullsFirst: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLiveMajors(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setLiveMajors([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
+
+  const majorsCorner = useMemo(() => {
+    if (!liveMajors) return null;
+    const fmt = (d) => d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'TBD';
+    const money = (n) => n ? `$${(n / 1000000).toFixed(2)}M` : 'TBD';
+
+    if (theme === 'golf') {
+      const champions = liveMajors.filter((r) => r.year === 2026 && r.status === 'completed');
+      const upcoming = liveMajors.filter((r) => r.year === 2027);
+      return {
+        champions: {
+          men: champions.filter((r) => r.gender === 'men'),
+          women: champions.filter((r) => r.gender === 'women'),
+        },
+        upcoming: upcoming.map((r) => ({
+          key: r.major_key, name: r.display_name, venue: r.venue_name || 'TBD',
+          when: r.start_date ? `${fmt(r.start_date)} – ${fmt(r.end_date)}` : 'Dates TBD',
+        })),
+        fmt, money,
+      };
+    }
+
+    // Tennis: merge the men's and women's rows for the same event/year
+    // into one combined entry, since it's the same tournament.
+    const mergeByEvent = (rows) => {
+      const byKey = {};
+      for (const r of rows) {
+        byKey[r.major_key] ||= { key: r.major_key, name: r.display_name, venue: r.venue_name, start: r.start_date, end: r.end_date };
+        byKey[r.major_key][r.gender === 'men' ? 'menWinner' : 'womenWinner'] = r.winner_name;
+      }
+      return Object.values(byKey);
+    };
+    const champions2026 = mergeByEvent(liveMajors.filter((r) => r.year === 2026));
+    const upcoming2027 = mergeByEvent(liveMajors.filter((r) => r.year === 2027));
+    return { champions2026, upcoming2027, fmt, money };
+  }, [liveMajors, theme]);
+
   useEffect(() => {
     if (theme !== 'golf') { setLiveNextEvent([]); return; }
     let cancelled = false;
@@ -966,6 +1019,95 @@ export default function App() {
               );
             })}
           </div>
+        </section>
+
+        <section>
+          <div className="section-head"><span className="section-title">Majors Corner</span></div>
+          {majorsCorner ? (
+            theme === 'golf' ? (
+              <div className="majors-corner">
+                <div className="majors-block">
+                  <div className="majors-block-label">2026 CHAMPIONS — MEN'S</div>
+                  {majorsCorner.champions.men.map((r) => (
+                    <div className="major-row" key={r.major_key}>
+                      <div className="major-name">{r.display_name}</div>
+                      <div className="major-detail">
+                        {r.winner_name ? (
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
+                        ) : 'TBD'}
+                        {' · '}
+                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
+                        {' · '}{majorsCorner.money(r.winner_share)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="majors-block">
+                  <div className="majors-block-label">2026 CHAMPIONS — WOMEN'S</div>
+                  {majorsCorner.champions.women.map((r) => (
+                    <div className="major-row" key={r.major_key}>
+                      <div className="major-name">{r.display_name}</div>
+                      <div className="major-detail">
+                        {r.winner_name ? (
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
+                        ) : 'TBD'}
+                        {' · '}
+                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
+                        {' · '}{majorsCorner.money(r.winner_share)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="majors-block">
+                  <div className="majors-block-label">2027 SCHEDULE — MEN'S</div>
+                  {majorsCorner.upcoming.map((r) => (
+                    <div className="major-row" key={r.key}>
+                      <div className="major-name">{r.name}</div>
+                      <div className="major-detail">
+                        {r.venue !== 'TBD' ? (
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a>
+                        ) : 'Venue TBD'}
+                        {' · '}{r.when}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="majors-corner">
+                <div className="majors-block">
+                  <div className="majors-block-label">2026 CHAMPIONS</div>
+                  {majorsCorner.champions2026.map((r) => (
+                    <div className="major-row" key={r.key}>
+                      <div className="major-name">
+                        {r.name}
+                        <span className="major-venue-inline"> · <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a></span>
+                      </div>
+                      <div className="major-detail">
+                        Men's: {r.menWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.menWinner)}`} target="_blank" rel="noopener noreferrer">{r.menWinner}</a> : 'TBD'}
+                        {' · '}
+                        Women's: {r.womenWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.womenWinner)}`} target="_blank" rel="noopener noreferrer">{r.womenWinner}</a> : 'TBD'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="majors-block">
+                  <div className="majors-block-label">2027 SCHEDULE</div>
+                  {majorsCorner.upcoming2027.map((r) => (
+                    <div className="major-row" key={r.key}>
+                      <div className="major-name">
+                        {r.name}
+                        <span className="major-venue-inline"> · <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a></span>
+                      </div>
+                      <div className="major-detail">{majorsCorner.fmt(r.start)} – {majorsCorner.fmt(r.end)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          ) : (
+            <div className="coming-soon"><p>Loading majors data…</p></div>
+          )}
         </section>
 
         <section>
