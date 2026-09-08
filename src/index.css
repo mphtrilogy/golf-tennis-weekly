@@ -759,6 +759,9 @@
     .week-nav button { min-height: 40px; padding: 8px 14px; }
     .player-search button { min-height: 44px; padding: 0 20px; }
     .player-search input { min-height: 44px; }
+    .ticker { height: 28px; }
+    .ticker-bug { height: 28px; padding: 0 8px; font-size: 9px; }
+    .ticker-item { font-size: 10px; padding: 0 6px; }
   }
   @media (max-width: 420px) {
     .rank-row { font-size: 13px; }
