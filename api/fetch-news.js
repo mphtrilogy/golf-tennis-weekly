@@ -16,12 +16,15 @@
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
 
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 40 };
 
 const FEEDS = {
-  golf: ['https://golf.com/feed/'],
-  // ESPN's dedicated tennis "wire" feed appears to sit empty much of
-  // the time — BBC Sport's tennis feed is the fallback if so.
+  // Merged, not just fallback — real breadth from two direct publishers
+  // instead of leaning on one. Golfweek's URL follows the same
+  // arc/outboundfeeds pattern every other Gannett/USA Today Network
+  // site uses (nj.com, silive.com, etc.) — wrapped safely either way,
+  // so a wrong guess just yields zero extra items, not a break.
+  golf: ['https://golf.com/feed/', 'https://golfweek.usatoday.com/arc/outboundfeeds/rss/'],
   tennis: ['https://www.espn.com/espn/rss/tennis/news', 'https://feeds.bbci.co.uk/sport/tennis/rss.xml'],
 };
 
@@ -57,22 +60,17 @@ async function fetchOneFeed(url, sport) {
   const items = $('item').slice(0, 25).toArray();
   const feedLabel = new URL(url).hostname.replace('www.', '');
 
-  let index = -1;
   for (const el of items) {
-    index++;
     const title = $(el).find('title').first().text().trim();
     const link = $(el).find('link').first().text().trim();
     const pubDate = $(el).find('pubDate').first().text().trim();
     const creator = $(el).find('dc\\:creator, creator').first().text().trim();
     if (!title || !link) continue;
 
-    let image =
+    const image =
       $(el).find('media\\:content, content').first().attr('url') ||
       $(el).find('enclosure').first().attr('url') ||
       null;
-    // Only worth the extra fetch for the featured slots (first 5) —
-    // the long headline list below doesn't render images at all.
-    if (!image && index < 5) image = await fetchOgImage(link);
 
     rows.push({
       sport,
@@ -125,25 +123,34 @@ async function fetchGoogleNewsBreadth(sport) {
 }
 
 async function fetchNewsForSport(sport) {
-  let featured = [];
-  let lastErr = null;
+  const collected = [];
+  let anySucceeded = false;
+
   for (const url of FEEDS[sport]) {
     try {
       const rows = await fetchOneFeed(url, sport);
-      if (rows.length > 0) { featured = dedupeByTitle(rows); break; }
-    } catch (err) {
-      lastErr = err;
+      if (rows.length > 0) { collected.push(...rows); anySucceeded = true; }
+    } catch {
+      // One source failing doesn't stop the others — this is exactly
+      // the redundancy multiple sources are for.
     }
   }
-  if (featured.length === 0 && lastErr) throw lastErr;
-  if (featured.length === 0) throw new Error(`All feeds for ${sport} returned zero items`);
+  if (!anySucceeded) throw new Error(`All feeds for ${sport} returned zero items`);
+
+  const merged = dedupeByTitle(collected).sort(
+    (a, b) => new Date(b.published_at || 0) - new Date(a.published_at || 0)
+  );
+
+  // Only the top-5 featured slots render images — worth the extra
+  // fetch there for anything the feed itself didn't already provide.
+  for (let i = 0; i < Math.min(5, merged.length); i++) {
+    if (!merged[i].image_url) merged[i].image_url = await fetchOgImage(merged[i].link);
+  }
 
   const breadth = await fetchGoogleNewsBreadth(sport).catch(() => []);
-  // Featured (image-bearing) items always lead, so the top-5 photo
-  // slots never end up empty — breadth items fill out the long list.
-  const featuredTitles = new Set(featured.map((r) => r.title));
-  const extra = dedupeByTitle(breadth).filter((r) => !featuredTitles.has(r.title));
-  return [...featured, ...extra];
+  const mergedTitles = new Set(merged.map((r) => r.title));
+  const extra = dedupeByTitle(breadth).filter((r) => !mergedTitles.has(r.title));
+  return [...merged, ...extra];
 }
 
 function dedupeByTitle(rows) {
