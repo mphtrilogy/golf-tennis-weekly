@@ -534,6 +534,51 @@
   .headline-row:last-child { border-bottom: none; }
   .headline-row.even { background: var(--paper); }
   .headline-row.odd { background: var(--paper-alt); }
+
+  /* ---------- Majors Corner ---------- */
+  .majors-corner {
+    display: grid;
+    gap: 18px;
+  }
+  .majors-block {
+    border: 1px solid var(--line);
+  }
+  .majors-block-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    padding: 8px 12px;
+    background: var(--paper-alt);
+    border-bottom: 1px solid var(--line);
+  }
+  .major-row {
+    padding: 10px 12px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .major-row:last-child { border-bottom: none; }
+  .major-name {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--ink);
+  }
+  .major-venue-inline {
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .major-venue-inline a { color: var(--accent); }
+  .major-detail {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 3px;
+  }
+  .major-detail a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  @media (min-width: 700px) {
+    .majors-corner { grid-template-columns: repeat(2, 1fr); }
+  }
   .headline-title {
     font-family: 'PT Serif', Georgia, serif;
     font-size: 13.5px;
