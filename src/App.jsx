@@ -328,6 +328,26 @@ export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
   const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'amateur' | 'tutorials' | 'trivia' | 'tv'
+
+  // Real navigation: every view change gets a browser history entry, so
+  // the native back button moves between views instead of exiting the
+  // whole app unexpectedly (which is what was happening before — view
+  // changes never touched browser history at all, so "back" had nothing
+  // of ours to go back to).
+  const navigateTo = (newView) => {
+    setView(newView);
+    window.history.pushState({ gtwView: newView }, '', `#${newView === 'home' ? '' : newView}`);
+  };
+
+  useEffect(() => {
+    // Establish the initial history entry once, on first load.
+    window.history.replaceState({ gtwView: 'home' }, '', window.location.pathname);
+    const onPopState = (e) => {
+      setView(e.state?.gtwView || 'home');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [spotlightPhoto, setSpotlightPhoto] = useState(null);
   const [spotlightDescription, setSpotlightDescription] = useState(null);
@@ -777,6 +797,7 @@ export default function App() {
         <div className="wrap">
           <div className="tabs-nav">
             {[
+              ['home', '🏠 Home'],
               ['rankings', 'Rankings'],
               ['schedule', 'Schedule'],
               ['majors', 'Majors & History'],
@@ -789,7 +810,7 @@ export default function App() {
                 key={key}
                 href="#"
                 className={view === key ? 'active' : ''}
-                onClick={(e) => { e.preventDefault(); setView(key); }}
+                onClick={(e) => { e.preventDefault(); navigateTo(key); }}
               >
                 {label}
               </a>
@@ -801,7 +822,7 @@ export default function App() {
       {liveNews && liveNews.length > 0 && (
         <div className="ticker">
           <span className="ticker-bug">{theme === 'golf' ? '⛳ LIVE' : '🎾 LIVE'}</span>
-          <div className="ticker-scroll">
+          <div className="ticker-scroll" style={{ animationDuration: `${Math.max(70, liveNews.length * 9)}s` }}>
             {[...liveNews, ...liveNews].map((n, i) => (
               <a href={n.link} target="_blank" rel="noopener noreferrer" className="ticker-item" key={i}>
                 <span className="ticker-source">[{n.source}]</span> {n.title}
@@ -970,7 +991,7 @@ export default function App() {
         <section id="rankings">
           <div className="section-head">
             <span className="section-title">Rankings Snapshot</span>
-            <a className="section-link" href="#" onClick={(e) => { e.preventDefault(); setView('rankings'); }}>Full top 100 →</a>
+            <a className="section-link" href="#" onClick={(e) => { e.preventDefault(); navigateTo('rankings'); }}>Full top 100 →</a>
           </div>
           <div className="period-toggle">
             {['wk', 'mo', 'yr'].map((p) => (
@@ -1000,7 +1021,7 @@ export default function App() {
               </div>
             ))}
           </div>
-          <button className="rank-expand" onClick={() => setView('rankings')}>
+          <button className="rank-expand" onClick={() => navigateTo('rankings')}>
             View full Top 100 →
           </button>
         </section>
@@ -1206,7 +1227,7 @@ export default function App() {
       {view === 'rankings' && (
         <div className="wrap">
           <div className="page-header">
-            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
             <h2>Full Rankings — Top 100</h2>
           </div>
           <div className="period-toggle">
@@ -1243,7 +1264,7 @@ export default function App() {
       {view === 'schedule' && (
         <div className="wrap">
           <div className="page-header">
-            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
             <h2>Upcoming Schedule</h2>
           </div>
           {theme === 'tennis' && tourneyLive?.schedule?.length > 0 ? (
@@ -1294,7 +1315,7 @@ export default function App() {
       {['majors', 'amateur', 'tutorials', 'trivia', 'tv'].includes(view) && (
         <div className="wrap">
           <div className="page-header">
-            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); setView('home'); }}>← Back to Home</a>
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
             <h2>{{
               majors: 'Majors & History',
               amateur: 'Amateur',
