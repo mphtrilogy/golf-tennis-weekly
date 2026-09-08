@@ -798,6 +798,20 @@ export default function App() {
         </div>
       </header>
 
+      {liveNews && liveNews.length > 0 && (
+        <div className="ticker">
+          <span className="ticker-bug">{theme === 'golf' ? '⛳ LIVE' : '🎾 LIVE'}</span>
+          <div className="ticker-scroll">
+            {[...liveNews, ...liveNews].map((n, i) => (
+              <a href={n.link} target="_blank" rel="noopener noreferrer" className="ticker-item" key={i}>
+                <span className="ticker-source">[{n.source}]</span> {n.title}
+                <span className="ticker-dot">  ●  </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {view === 'home' && (
       <div className="wrap">
         <section>
