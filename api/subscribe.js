@@ -6,8 +6,8 @@
 // (api/send-digest.js) reads this same field to personalize each
 // subscriber's Tuesday email.
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = 'newsletter@gtw.nysportsdaily.com'; // verified in Resend Sept 9, 2026
 const SITE_URL = 'https://golf-tennis-weekly.vercel.app';
