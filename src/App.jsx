@@ -1412,15 +1412,11 @@ export default function App() {
                 );
               })}
             </ul>
-          ) : (
+          ) : theme === 'tennis' ? (
             <div className="coming-soon">
-              <p>
-                {theme === 'golf'
-                  ? 'Golf doesn\'t have head-to-head match schedules like tennis — see the full tournament calendar below instead.'
-                  : 'No upcoming matches loaded yet — check back after the next data pull.'}
-              </p>
+              <p>No upcoming matches loaded yet — check back after the next data pull.</p>
             </div>
-          )}
+          ) : null}
 
           {theme === 'golf' && (
             <>
