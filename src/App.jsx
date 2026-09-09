@@ -1154,9 +1154,10 @@ export default function App() {
                     const q = encodeURIComponent(p.n);
                     const stat = theme === 'golf' ? seasonStats[p.n] : null;
                     return (
-                      <div className="rank-row" key={p.n}>
+                      <div className="rank-row" key={p.n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="num">{idx + 1}</span>
-                        <span className="name">
+                        <PlayerCardAvatar name={p.n} small />
+                        <span className="name" style={{ flex: 1 }}>
                           <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
                           {stat && (
                             <span className="rank-substat">
@@ -1404,9 +1405,10 @@ export default function App() {
                     const q = encodeURIComponent(p.n);
                     const stat = theme === 'golf' ? seasonStats[p.n] : null;
                     return (
-                      <div className="rank-row" key={p.n}>
+                      <div className="rank-row" key={p.n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span className="num">{idx + 1}</span>
-                        <span className="name">
+                        {idx < 20 && <PlayerCardAvatar name={p.n} small />}
+                        <span className="name" style={{ flex: 1 }}>
                           <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
                           {stat && (
                             <span className="rank-substat">
@@ -1584,8 +1586,10 @@ export default function App() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`headline-row ${i % 2 === 0 ? 'even' : 'odd'}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10 }}
                   >
-                    <span className="headline-title">{h.year} — {h.winner_name}{h.country ? ` (${h.country})` : ''}</span>
+                    {i < 30 && <PlayerCardAvatar name={h.winner_name} small />}
+                    <span className="headline-title" style={{ flex: 1 }}>{h.year} — {h.winner_name}{h.country ? ` (${h.country})` : ''}</span>
                     <span className="headline-source">Wiki →</span>
                   </a>
                 );
