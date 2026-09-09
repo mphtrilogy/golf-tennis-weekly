@@ -1634,17 +1634,55 @@ export default function App() {
             ))}
           </div>
 
-          {[
-            ['TV Schedule', 'Where to watch this week\'s coverage — see the Schedule tab for real tournament dates and times; broadcast/channel info is still a manual build.'],
-            ['Amateur', 'US Amateur, NCAA golf/tennis, junior Slams — real content, not yet built.'],
-            ['Trivia', 'Golf and tennis trivia questions — real content, not yet built.'],
-            ['Tutorials', 'How to play, how to get better — evergreen content, not yet written.'],
-          ].map(([title, desc]) => (
-            <div className="majors-block" style={{ marginBottom: 20 }} key={title}>
-              <div className="majors-block-label">{title.toUpperCase()}</div>
-              <div className="major-row"><div className="major-detail">{desc}</div></div>
-            </div>
-          ))}
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">TV SCHEDULE — WHERE TO WATCH</div>
+            {(theme === 'golf'
+              ? [['Golf Channel', 'https://www.golfchannel.com'], ['NBC Sports Golf', 'https://www.nbcsports.com/golf'], ['CBS Sports Golf', 'https://www.cbssports.com/golf'], ['PGA Tour Live', 'https://www.pgatour.com/live']]
+              : [['Tennis Channel', 'https://www.tennischannel.com'], ['ESPN Tennis', 'https://www.espn.com/tennis'], ['USA Network', 'https://www.usanetwork.com'], ['Peacock', 'https://www.peacocktv.com']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+            <div className="major-row"><div className="major-detail">Real tournament dates/times are on the Schedule tab — this is just where to actually watch.</div></div>
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">AMATEUR &amp; COLLEGE</div>
+            {(theme === 'golf'
+              ? [['USGA (U.S. Amateur)', 'https://www.usga.org'], ['NCAA Golf', 'https://www.ncaa.com/sports/golf-men'], ['Augusta National Women\'s Amateur', 'https://www.anwagolf.com']]
+              : [['ITA (College Tennis)', 'https://www.wearecollegetennis.com'], ['ITF Junior Circuit', 'https://www.itftennis.com'], ['US Open Junior Championships', 'https://www.usopen.org']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">TRIVIA &amp; HISTORY RESOURCES</div>
+            {(theme === 'golf'
+              ? [['Golf Digest', 'https://www.golfdigest.com'], ['Men\'s Major Championships (Wikipedia)', 'https://en.wikipedia.org/wiki/Men%27s_major_golf_championships']]
+              : [['Tennis.com History', 'https://www.tennis.com'], ['ITF History', 'https://www.itftennis.com'], ['Grand Slam Records (Wikipedia)', 'https://en.wikipedia.org/wiki/Grand_Slam_(tennis)']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+            <div className="major-row"><div className="major-detail">Real question-and-answer trivia (built by us, not just links) — not yet written.</div></div>
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">TUTORIALS &amp; INSTRUCTION</div>
+            {(theme === 'golf'
+              ? [['PGA.com Instruction', 'https://www.pga.com/story/instruction'], ['Golf Digest Instruction', 'https://www.golfdigest.com/instruction'], ['GolfPass', 'https://www.golfpass.com']]
+              : [['USTA Play Tennis', 'https://www.usta.com'], ['ITF Play Tennis', 'https://www.itftennis.com'], ['Tennis.com How-To', 'https://www.tennis.com']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
