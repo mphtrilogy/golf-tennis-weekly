@@ -517,6 +517,32 @@ export default function App() {
   }, [theme]);
   const [playerSearchInput, setPlayerSearchInput] = useState('');
   const [searchedPlayerName, setSearchedPlayerName] = useState(null);
+
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupName, setSignupName] = useState('');
+  const [signupSports, setSignupSports] = useState(['golf', 'tennis']);
+  const [signupStatus, setSignupStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
+
+  const toggleSignupSport = (sport) => {
+    setSignupSports((prev) =>
+      prev.includes(sport) ? prev.filter((s) => s !== sport) : [...prev, sport]
+    );
+  };
+
+  const submitSignup = async () => {
+    if (!signupEmail.includes('@')) { setSignupStatus('error'); return; }
+    setSignupStatus('sending');
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signupEmail, name: signupName, sports: signupSports }),
+      });
+      setSignupStatus(res.ok ? 'ok' : 'error');
+    } catch {
+      setSignupStatus('error');
+    }
+  };
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
   const [tourCalendar, setTourCalendar] = useState(null);
@@ -1685,6 +1711,47 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <div className="wrap">
+        <div className="newsletter-signup">
+          <div className="newsletter-title">⛳🎾 Get Golf &amp; Tennis Weekly</div>
+          <p className="newsletter-sub">Every Tuesday — last week's recap, what's next, a deep-dive feature, and a bit of history. Free, no ads.</p>
+          {signupStatus === 'ok' ? (
+            <p className="newsletter-confirm">You're in — check your email 🎉</p>
+          ) : (
+            <>
+              <div className="newsletter-row">
+                <input
+                  type="email"
+                  placeholder="you@email.com"
+                  value={signupEmail}
+                  onChange={(e) => setSignupEmail(e.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="Name (optional)"
+                  value={signupName}
+                  onChange={(e) => setSignupName(e.target.value)}
+                />
+              </div>
+              <div className="newsletter-sports">
+                <label>
+                  <input type="checkbox" checked={signupSports.includes('golf')} onChange={() => toggleSignupSport('golf')} />
+                  ⛳ Golf
+                </label>
+                <label>
+                  <input type="checkbox" checked={signupSports.includes('tennis')} onChange={() => toggleSignupSport('tennis')} />
+                  🎾 Tennis
+                </label>
+              </div>
+              <button className="newsletter-submit" onClick={submitSignup} disabled={signupStatus === 'sending'}>
+                {signupStatus === 'sending' ? 'Subscribing…' : 'Subscribe'}
+              </button>
+              {signupStatus === 'error' && <p className="newsletter-error">Something went wrong — check your email address and try again.</p>}
+            </>
+          )}
+        </div>
+      </div>
 
       <footer>
         <span className="mph-mark">MPH</span>Golf and Tennis Weekly — part of the MPH family
