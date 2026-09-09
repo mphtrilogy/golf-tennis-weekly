@@ -374,6 +374,24 @@ export default function App() {
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
   const [tourCalendar, setTourCalendar] = useState(null);
+  const [golfTourCalendar, setGolfTourCalendar] = useState(null);
+
+  useEffect(() => {
+    if (theme !== 'golf') { setGolfTourCalendar([]); return; }
+    let cancelled = false;
+    setGolfTourCalendar(null);
+    supabase
+      .from('gtw_golf_tour_calendar')
+      .select('*')
+      .order('start_date', { ascending: true })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setGolfTourCalendar(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setGolfTourCalendar([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
 
   useEffect(() => {
     if (theme !== 'tennis') { setTourCalendar([]); return; }
@@ -449,11 +467,27 @@ export default function App() {
       .slice(0, 6);
 
     // Up next: a different tournament with matches still ahead of now.
-    const upcoming = names
+    let upcoming = names
       .filter((n) => n !== current)
       .map((n) => ({ name: n, next: Math.min(...byTournament[n].map((m) => new Date(m.match_date).getTime())) }))
       .filter((t) => t.next > now)
       .sort((a, b) => a.next - b.next)[0];
+
+    // Fallback: gtw_matches only ever knows about the tournament(s)
+    // currently in ESPN's scoreboard window — it has no visibility into
+    // what's next once the current event ends. The full season calendar
+    // does, so use it when the live-matches table can't answer this.
+    let nextMeta = 'Draw building';
+    if (!upcoming && tourCalendar && tourCalendar.length > 0) {
+      const fromCalendar = tourCalendar
+        .filter((t) => t.tournament_name !== current && new Date(t.start_date).getTime() > now)
+        .sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0];
+      if (fromCalendar) {
+        const when = new Date(fromCalendar.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        upcoming = { name: fromCalendar.tournament_name };
+        nextMeta = `Starts ${when}`;
+      }
+    }
 
     // Full schedule: every match still ahead of now, across all
     // tournaments, soonest first — feeds the dedicated Schedule tab.
@@ -464,11 +498,11 @@ export default function App() {
 
     return {
       now: { name: current, meta: nowMeta },
-      next: upcoming ? { name: upcoming.name, meta: 'Draw building' } : null,
+      next: upcoming ? { name: upcoming.name, meta: nextMeta } : null,
       results,
       schedule: scheduleMatches,
     };
-  }, [liveMatches]);
+  }, [liveMatches, tourCalendar]);
 
   // Live golf leaderboard (PGA + LPGA) — same fetch/derive pattern as
   // tennis matches, but golf's shape is leaderboard-style (one event,
@@ -1382,10 +1416,43 @@ export default function App() {
             <div className="coming-soon">
               <p>
                 {theme === 'golf'
-                  ? "Golf schedule data hasn't been built yet — tennis matches are live, golf tournament scheduling is a similar build for later."
+                  ? 'Golf doesn\'t have head-to-head match schedules like tennis — see the full tournament calendar below instead.'
                   : 'No upcoming matches loaded yet — check back after the next data pull.'}
               </p>
             </div>
+          )}
+
+          {theme === 'golf' && (
+            <>
+              <div className="page-header" style={{ paddingTop: 30 }}>
+                <h2 style={{ fontSize: 20 }}>Full Season Calendar</h2>
+              </div>
+              {golfTourCalendar && golfTourCalendar.length > 0 ? (
+                <div className="headline-list">
+                  <div className="headline-list-label">PGA &amp; LPGA · NEXT ~5 MONTHS</div>
+                  {golfTourCalendar.map((t, i) => {
+                    const when = t.start_date
+                      ? new Date(t.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                      : 'Date TBD';
+                    const q = encodeURIComponent(t.tournament_name);
+                    return (
+                      <a
+                        key={`${t.tour}-${t.tournament_name}-${t.start_date}`}
+                        href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`headline-row ${i % 2 === 0 ? 'even' : 'odd'}`}
+                      >
+                        <span className="headline-title">[{t.tour.toUpperCase()}] {t.tournament_name}</span>
+                        <span className="headline-source">{when} →</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="coming-soon"><p>Season calendar not loaded yet — check back after the next weekly pull.</p></div>
+              )}
+            </>
           )}
 
           {theme === 'tennis' && (
