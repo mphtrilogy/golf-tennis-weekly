@@ -69,6 +69,7 @@ async function fetchTennisRankings(league) {
   const withNames = await mapWithLimit(current.ranks || [], 8, async (r) => {
     const name = await resolveAthleteName(r.athlete.$ref);
     if (!name) return null;
+    const espnId = r.athlete.$ref.match(/athletes\/(\d+)/)?.[1] || null;
     return {
       sport: 'tennis',
       tour: league,
@@ -76,6 +77,7 @@ async function fetchTennisRankings(league) {
       rank: r.current,
       player_name: name,
       points: r.points ?? null,
+      espn_id: espnId,
       source: 'primary',
     };
   });
@@ -98,6 +100,7 @@ async function fetchGolfWorldRankings(season = new Date().getFullYear()) {
     const name = await resolveAthleteName(r.athlete.$ref);
     if (!name) return null;
     const totalPoints = r.record?.stats?.find((s) => s.name === 'totalPoints')?.value ?? null;
+    const espnId = r.athlete.$ref.match(/athletes\/(\d+)/)?.[1] || null;
     return {
       sport: 'golf',
       tour: 'owgr',
@@ -105,6 +108,7 @@ async function fetchGolfWorldRankings(season = new Date().getFullYear()) {
       rank: r.current,
       player_name: name,
       points: totalPoints,
+      espn_id: espnId,
       source: 'primary',
     };
   });
