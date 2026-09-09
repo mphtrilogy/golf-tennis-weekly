@@ -247,7 +247,7 @@ function getDailyPlayer(pool) {
 // by name, pull the summary thumbnail. Used for the home page's
 // real-player cards (#1 men's, #1 women's, hottest riser), which each
 // need their own independent photo lookup by whatever name lands there.
-function PlayerCardAvatar({ name }) {
+function PlayerCardAvatar({ name, small }) {
   const [photo, setPhoto] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +269,11 @@ function PlayerCardAvatar({ name }) {
     return () => { cancelled = true; };
   }, [name]);
 
+  if (small) {
+    // Dense list context — a tiny empty placeholder circle looks worse
+    // than just not showing anything until a real photo loads.
+    return photo ? <img className="avatar-small" src={photo} alt="" style={{ objectFit: 'cover' }} /> : null;
+  }
   return photo
     ? <img className="avatar" src={photo} alt="" style={{ objectFit: 'cover' }} />
     : <div className="avatar" />;
@@ -344,6 +349,129 @@ function statChipsForSport(fields, sport) {
   return chips;
 }
 
+// Trading-card data layer, ported from The Scouting Report's approach:
+// search Wikipedia by name (self-healing — never depends on a stored
+// URL that could go stale), pull the clean summary for photo/description,
+// then pull raw infobox wikitext for a few "stat chip" fields. Golf and
+// tennis infoboxes use different field names than the statlabelN/
+// statvalueN pattern the original tool was built around, so this uses
+// its own sport-specific candidate list instead. Extracted as a hook so
+// both the Daily Spotlight card and the player-search card can share it.
+function usePlayerCardData(name, theme) {
+  const [photo, setPhoto] = useState(null);
+  const [description, setDescription] = useState(null);
+  const [stats, setStats] = useState([]);
+  const [pageUrl, setPageUrl] = useState(null);
+
+  useEffect(() => {
+    if (!name) { setPhoto(null); setDescription(null); setStats([]); setPageUrl(null); return; }
+    let cancelled = false;
+    setPhoto(null);
+    setDescription(null);
+    setStats([]);
+    setPageUrl(null);
+
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(name)}&format=json&origin=*&srlimit=1`;
+
+    fetch(searchUrl)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return null;
+        const title = data?.query?.search?.[0]?.title;
+        if (!title) return null;
+        return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+      })
+      .then((res) => (res && res.ok ? res.json() : null))
+      .then((summary) => {
+        if (cancelled || !summary) return;
+        if (summary.thumbnail?.source) setPhoto(summary.thumbnail.source);
+        if (summary.description) setDescription(summary.description);
+        if (summary.content_urls?.desktop?.page) setPageUrl(summary.content_urls.desktop.page);
+      })
+      .catch(() => {});
+
+    (async () => {
+      try {
+        const searchData = await (await fetch(searchUrl)).json();
+        const title = searchData?.query?.search?.[0]?.title;
+        if (!title || cancelled) return;
+        const wikitextUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&format=json&origin=*&titles=${encodeURIComponent(title)}`;
+        const wtData = await (await fetch(wikitextUrl)).json();
+        const page = Object.values(wtData?.query?.pages || {})[0];
+        const wikitext = page?.revisions?.[0]?.slots?.main?.['*'] || '';
+        const fields = parseInfobox(wikitext);
+        const chips = statChipsForSport(fields, theme);
+        if (!cancelled) setStats(chips);
+      } catch {
+        // Non-fatal — the card still works with photo + description only.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [name, theme]);
+
+  return { photo, description, stats, pageUrl };
+}
+
+// The trading card itself, reusable for the daily pick or a searched
+// player. `fact` is optional — search results won't have a curated
+// one-liner the way the daily roster does.
+function DispatchCard({ name, fact, tag, theme }) {
+  const { photo, description, stats, pageUrl } = usePlayerCardData(name, theme);
+  return (
+    <div className="dispatch-card">
+      <div className="dispatch-perf" aria-hidden="true">
+        {Array.from({ length: 24 }).map((_, i) => <span key={i} className="dispatch-perf-dot" />)}
+      </div>
+      <div className="dispatch-header-row">
+        <span className="dispatch-no">DISPATCH NO. {dispatchNumber(name)}</span>
+        <span className="dispatch-tag">{tag}</span>
+      </div>
+      <div className="dispatch-name-row">
+        {photo ? (
+          <img className="dispatch-thumb" src={photo} alt="" />
+        ) : (
+          <div className="dispatch-avatar-fallback">{initials(name)}</div>
+        )}
+        <div>
+          <div className="dispatch-name">{name}</div>
+          {description && <div className="dispatch-desc">{description}</div>}
+        </div>
+      </div>
+      <div className="dispatch-hr" />
+      {fact && <p className="dispatch-fact">{fact}</p>}
+      {stats.length > 0 && (
+        <div className="dispatch-stats-row">
+          {stats.map((s) => (
+            <div className="dispatch-stat-chip" key={s.label}>
+              <div className="dispatch-stat-value">{s.value}</div>
+              <div className="dispatch-stat-label">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="dispatch-hr" />
+      <div className="dispatch-link-row">
+        <a
+          className="dispatch-link-chip"
+          href={pageUrl || `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(name)}`}
+          target="_blank" rel="noopener noreferrer"
+        >
+          Wikipedia →
+        </a>
+        <a
+          className="dispatch-link-chip"
+          href={`https://www.google.com/search?q=${encodeURIComponent(name)}`}
+          target="_blank" rel="noopener noreferrer"
+        >
+          Search →
+        </a>
+      </div>
+      <div className="dispatch-footer">SOURCE: WIKIPEDIA · SCOUTING REPORT</div>
+    </div>
+  );
+}
+
 export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
@@ -387,10 +515,8 @@ export default function App() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [theme]);
-  const [spotlightPhoto, setSpotlightPhoto] = useState(null);
-  const [spotlightDescription, setSpotlightDescription] = useState(null);
-  const [spotlightStats, setSpotlightStats] = useState([]);
-  const [spotlightPageUrl, setSpotlightPageUrl] = useState(null);
+  const [playerSearchInput, setPlayerSearchInput] = useState('');
+  const [searchedPlayerName, setSearchedPlayerName] = useState(null);
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
   const [tourCalendar, setTourCalendar] = useState(null);
@@ -693,63 +819,6 @@ export default function App() {
   const dailyPlayerPool = theme === 'golf' ? DAILY_PLAYERS_GOLF : DAILY_PLAYERS_TENNIS;
   const dailyPlayer = getDailyPlayer(dailyPlayerPool);
 
-  // Trading-card data layer, ported from The Scouting Report's approach:
-  // search Wikipedia by name (self-healing — never depends on a stored
-  // URL that could go stale), pull the clean summary for photo/description,
-  // then pull raw infobox wikitext for a few "stat chip" fields. Golf and
-  // tennis infoboxes use different field names than the statlabelN/
-  // statvalueN pattern the original tool was built around, so this uses
-  // its own sport-specific candidate list instead.
-  useEffect(() => {
-    let cancelled = false;
-    setSpotlightPhoto(null);
-    setSpotlightDescription(null);
-    setSpotlightStats([]);
-    setSpotlightPageUrl(null);
-
-    const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(dailyPlayer.name)}&format=json&origin=*&srlimit=1`;
-    let resolvedTitle = null;
-
-    fetch(searchUrl)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled) return null;
-        const title = data?.query?.search?.[0]?.title;
-        if (!title) return null;
-        resolvedTitle = title;
-        return fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
-      })
-      .then((res) => (res && res.ok ? res.json() : null))
-      .then((summary) => {
-        if (cancelled || !summary) return;
-        if (summary.thumbnail?.source) setSpotlightPhoto(summary.thumbnail.source);
-        if (summary.description) setSpotlightDescription(summary.description);
-        if (summary.content_urls?.desktop?.page) setSpotlightPageUrl(summary.content_urls.desktop.page);
-      })
-      .catch(() => {});
-
-    // Separate chain for infobox stats — independent of the summary
-    // fetch above so a failure here never blocks the photo/description.
-    (async () => {
-      try {
-        // Reuse the same search result rather than searching twice.
-        const searchData = await (await fetch(searchUrl)).json();
-        const title = searchData?.query?.search?.[0]?.title;
-        if (!title || cancelled) return;
-        const wikitextUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&rvsection=0&format=json&origin=*&titles=${encodeURIComponent(title)}`;
-        const wtData = await (await fetch(wikitextUrl)).json();
-        const page = Object.values(wtData?.query?.pages || {})[0];
-        const wikitext = page?.revisions?.[0]?.slots?.main?.['*'] || '';
-        const fields = parseInfobox(wikitext);
-        const chips = statChipsForSport(fields, theme);
-        if (!cancelled) setSpotlightStats(chips);
-      } catch {
-        // Non-fatal — the card still works with photo + description only.
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [dailyPlayer.name]);
 
   // News is now fetched server-side (api/fetch-news.js, on a daily cron)
   // and stored in Supabase — no client-side CORS proxy involved at all,
@@ -863,31 +932,6 @@ export default function App() {
     });
   }, [liveRankings, theme, period]);
 
-  // Home page Players cards: #1 men's, #1 women's, and whoever's
-  // risen the most this week (🔥) — pulled from the same live rankings
-  // data, not a separate fetch. Any slot without real data (e.g.
-  // women's golf/Rolex, not live yet) falls back to sample individually
-  // rather than blanking the whole section.
-  const featuredPlayers = useMemo(() => {
-    if (!liveColumnsBySport) return null;
-    const [menCol, womenCol] = liveColumnsBySport;
-    const topMan = menCol && menCol.length > 0 ? menCol[0] : null;
-    const topWoman = womenCol && womenCol.length > 0 ? womenCol[0] : null;
-
-    const combined = [...(menCol || []), ...(womenCol || [])];
-    const hottest = combined.length > 0
-      ? combined.reduce((best, p) => (p.d > (best?.d ?? -Infinity) ? p : best), null)
-      : null;
-    const hasHeat = hottest && hottest.d > 0;
-
-    if (!topMan && !topWoman) return null;
-    return {
-      topMan: topMan ? { name: topMan.n, tag: "#1 Men's" } : null,
-      topWoman: topWoman ? { name: topWoman.n, tag: "#1 Women's" } : null,
-      hottest: hasHeat ? { name: hottest.n, tag: `🔥 +${hottest.d} this week` } : null,
-    };
-  }, [liveColumnsBySport]);
-
   const rankColumnsHome = useMemo(() => {
     return c.rankBase.map((base, i) => {
       const live = liveColumnsBySport && liveColumnsBySport[i];
@@ -957,56 +1001,35 @@ export default function App() {
       <div className="wrap">
         <section>
           <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
-          <div className="dispatch-card">
-            <div className="dispatch-perf" aria-hidden="true">
-              {Array.from({ length: 24 }).map((_, i) => <span key={i} className="dispatch-perf-dot" />)}
-            </div>
-            <div className="dispatch-header-row">
-              <span className="dispatch-no">DISPATCH NO. {dispatchNumber(dailyPlayer.name)}</span>
-              <span className="dispatch-tag">{dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}</span>
-            </div>
-            <div className="dispatch-name-row">
-              {spotlightPhoto ? (
-                <img className="dispatch-thumb" src={spotlightPhoto} alt="" />
-              ) : (
-                <div className="dispatch-avatar-fallback">{initials(dailyPlayer.name)}</div>
-              )}
-              <div>
-                <div className="dispatch-name">{dailyPlayer.name}</div>
-                {spotlightDescription && <div className="dispatch-desc">{spotlightDescription}</div>}
-              </div>
-            </div>
-            <div className="dispatch-hr" />
-            <p className="dispatch-fact">{dailyPlayer.fact}</p>
-            {spotlightStats.length > 0 && (
-              <div className="dispatch-stats-row">
-                {spotlightStats.map((s) => (
-                  <div className="dispatch-stat-chip" key={s.label}>
-                    <div className="dispatch-stat-value">{s.value}</div>
-                    <div className="dispatch-stat-label">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="dispatch-hr" />
-            <div className="dispatch-link-row">
-              <a
-                className="dispatch-link-chip"
-                href={spotlightPageUrl || `https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(dailyPlayer.name)}`}
-                target="_blank" rel="noopener noreferrer"
-              >
-                Wikipedia →
-              </a>
-              <a
-                className="dispatch-link-chip"
-                href={`https://www.google.com/search?q=${encodeURIComponent(dailyPlayer.name)}`}
-                target="_blank" rel="noopener noreferrer"
-              >
-                Search →
-              </a>
-            </div>
-            <div className="dispatch-footer">SOURCE: WIKIPEDIA · SCOUTING REPORT</div>
+          <DispatchCard
+            name={dailyPlayer.name}
+            fact={dailyPlayer.fact}
+            tag={dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}
+            theme={theme}
+          />
+
+          <div className="player-search-inline">
+            <input
+              type="text"
+              placeholder={`Search any ${theme === 'golf' ? 'golfer' : 'tennis player'}…`}
+              value={playerSearchInput}
+              onChange={(e) => setPlayerSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && playerSearchInput.trim()) setSearchedPlayerName(playerSearchInput.trim()); }}
+            />
+            <button onClick={() => { if (playerSearchInput.trim()) setSearchedPlayerName(playerSearchInput.trim()); }}>
+              Search
+            </button>
           </div>
+
+          {searchedPlayerName && (
+            <div style={{ marginTop: 14 }}>
+              <div className="section-head">
+                <span className="section-title">Search Result: {searchedPlayerName}</span>
+                <a href="#" className="section-link" onClick={(e) => { e.preventDefault(); setSearchedPlayerName(null); setPlayerSearchInput(''); }}>Clear ✕</a>
+              </div>
+              <DispatchCard name={searchedPlayerName} tag="SEARCH RESULT" theme={theme} />
+            </div>
+          )}
         </section>
 
         <section>
@@ -1157,36 +1180,6 @@ export default function App() {
         </section>
 
         <section>
-          <div className="section-head"><span className="section-title">Players</span></div>
-          <div className="player-search">
-            <input type="text" placeholder="Search a player…" />
-            <button>Search</button>
-          </div>
-          <div className="player-cards">
-            {[
-              { real: featuredPlayers?.topMan, fallback: c.players[0] },
-              { real: featuredPlayers?.topWoman, fallback: c.players[1] },
-              { real: featuredPlayers?.hottest, fallback: c.players[2] },
-            ].map((slot, i) => {
-              const name = slot.real?.name || slot.fallback;
-              const tag = slot.real?.tag || 'Profile →';
-              const q = encodeURIComponent(name);
-              return (
-                <div className="player-card" key={i}>
-                  {slot.real ? <PlayerCardAvatar name={name} /> : <div className="avatar" />}
-                  <div className="name">{name}</div>
-                  <div className="rank">{tag}</div>
-                  <div className="player-links">
-                    <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">Wiki</a>
-                    <a href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noopener noreferrer">Search</a>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section>
           <div className="section-head"><span className="section-title">Majors Corner</span></div>
           {majorsCorner ? (
             theme === 'golf' ? (
@@ -1194,15 +1187,18 @@ export default function App() {
                 <div className="majors-block">
                   <div className="majors-block-label">2026 CHAMPIONS — MEN'S</div>
                   {majorsCorner.champions.men.map((r) => (
-                    <div className="major-row" key={r.major_key}>
-                      <div className="major-name">{r.display_name}</div>
-                      <div className="major-detail">
-                        {r.winner_name ? (
-                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
-                        ) : 'TBD'}
-                        {' · '}
-                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
-                        {' · '}{majorsCorner.money(r.winner_share)}
+                    <div className="major-row major-row-with-photo" key={r.major_key}>
+                      {r.winner_name && <PlayerCardAvatar name={r.winner_name} small />}
+                      <div>
+                        <div className="major-name">{r.display_name}</div>
+                        <div className="major-detail">
+                          {r.winner_name ? (
+                            <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
+                          ) : 'TBD'}
+                          {' · '}
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
+                          {' · '}{majorsCorner.money(r.winner_share)}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1210,15 +1206,18 @@ export default function App() {
                 <div className="majors-block">
                   <div className="majors-block-label">2026 CHAMPIONS — WOMEN'S</div>
                   {majorsCorner.champions.women.map((r) => (
-                    <div className="major-row" key={r.major_key}>
-                      <div className="major-name">{r.display_name}</div>
-                      <div className="major-detail">
-                        {r.winner_name ? (
-                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
-                        ) : 'TBD'}
-                        {' · '}
-                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
-                        {' · '}{majorsCorner.money(r.winner_share)}
+                    <div className="major-row major-row-with-photo" key={r.major_key}>
+                      {r.winner_name && <PlayerCardAvatar name={r.winner_name} small />}
+                      <div>
+                        <div className="major-name">{r.display_name}</div>
+                        <div className="major-detail">
+                          {r.winner_name ? (
+                            <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.winner_name)}`} target="_blank" rel="noopener noreferrer">{r.winner_name}</a>
+                          ) : 'TBD'}
+                          {' · '}
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue_name)}`} target="_blank" rel="noopener noreferrer">{r.venue_name}</a>
+                          {' · '}{majorsCorner.money(r.winner_share)}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -1261,18 +1260,24 @@ export default function App() {
                 <div className="majors-block">
                   <div className="majors-block-label">2026 CHAMPIONS</div>
                   {majorsCorner.champions2026.map((r) => (
-                    <div className="major-row" key={r.key}>
-                      <div className="major-name">
-                        {r.name}
-                        <span className="major-venue-inline"> · <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a></span>
+                    <div className="major-row major-row-with-photo" key={r.key}>
+                      <div className="major-photo-pair">
+                        {r.menWinner && <PlayerCardAvatar name={r.menWinner} small />}
+                        {r.womenWinner && <PlayerCardAvatar name={r.womenWinner} small />}
                       </div>
-                      <div className="major-detail">
-                        Men's: {r.menWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.menWinner)}`} target="_blank" rel="noopener noreferrer">{r.menWinner}</a> : 'TBD'}
-                        {' · '}
-                        Women's: {r.womenWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.womenWinner)}`} target="_blank" rel="noopener noreferrer">{r.womenWinner}</a> : 'TBD'}
-                        {(r.purse_total || r.winner_share) && (
-                          <> · {majorsCorner.money(r.winner_share)} to each champion (purse {majorsCorner.money(r.purse_total)})</>
-                        )}
+                      <div>
+                        <div className="major-name">
+                          {r.name}
+                          <span className="major-venue-inline"> · <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a></span>
+                        </div>
+                        <div className="major-detail">
+                          Men's: {r.menWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.menWinner)}`} target="_blank" rel="noopener noreferrer">{r.menWinner}</a> : 'TBD'}
+                          {' · '}
+                          Women's: {r.womenWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.womenWinner)}`} target="_blank" rel="noopener noreferrer">{r.womenWinner}</a> : 'TBD'}
+                          {(r.purse_total || r.winner_share) && (
+                            <> · {majorsCorner.money(r.winner_share)} to each champion (purse {majorsCorner.money(r.purse_total)})</>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
