@@ -83,6 +83,26 @@ function deltaLabel(d) {
   if (d < 0) return { cls: 'down', txt: `▼${Math.abs(d)}` };
   return { cls: 'flat', txt: '—' };
 }
+// Women's golf (Rolex) rankings genuinely can't be automated — every
+// approach tried (direct fetch, browser headers, two different CORS
+// proxies) was blocked by the site's bot protection. Rather than show
+// fake sample names as if they were real, this points straight to the
+// real sources.
+function RolexDisclaimer() {
+  return (
+    <div className="coming-soon" style={{ textAlign: 'left' }}>
+      <p style={{ marginBottom: 10 }}>
+        Live Rolex Rankings can't be automated (the site blocks automated access) — see the real, current rankings directly:
+      </p>
+      <div className="event-links" style={{ gap: 14 }}>
+        <a href="https://www.lpga.com/stats-and-rankings/rolex/rolex-womens-world-golf-rankings" target="_blank" rel="noopener noreferrer">LPGA →</a>
+        <a href="https://www.rolexrankings.com/rankings" target="_blank" rel="noopener noreferrer">Rolex Rankings →</a>
+        <a href="https://en.wikipedia.org/wiki/Women%27s_World_Golf_Rankings" target="_blank" rel="noopener noreferrer">Wikipedia →</a>
+      </div>
+    </div>
+  );
+}
+
 function heatEmoji(h) {
   if (h === 'hot') return '🔥';
   if (h === 'cold') return '🧊';
@@ -1078,32 +1098,35 @@ export default function App() {
             ))}
           </div>
           <div className="rankings-grid">
-            {c.rankCols.map((label, i) => (
-              <div className="rank-col" key={label}>
-                <div className="col-label">{label}</div>
-                {rankColumnsHome[i].map((p, idx) => {
-                  const d = deltaLabel(p.d);
-                  const q = encodeURIComponent(p.n);
-                  const stat = theme === 'golf' ? seasonStats[p.n] : null;
-                  return (
-                    <div className="rank-row" key={p.n}>
-                      <span className="num">{idx + 1}</span>
-                      <span className="name">
-                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
-                        {stat && (
-                          <span className="rank-substat">
-                            {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
-                            {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
-                          </span>
-                        )}
-                      </span>
-                      <span className={`delta ${d.cls}`}>{d.txt}</span>
-                      <span className="heat">{heatEmoji(p.h)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+            {c.rankCols.map((label, i) => {
+              const isUnavailableWomensGolf = theme === 'golf' && i === 1 && !(liveColumnsBySport && liveColumnsBySport[1]);
+              return (
+                <div className="rank-col" key={label}>
+                  <div className="col-label">{label}</div>
+                  {isUnavailableWomensGolf ? <RolexDisclaimer /> : rankColumnsHome[i].map((p, idx) => {
+                    const d = deltaLabel(p.d);
+                    const q = encodeURIComponent(p.n);
+                    const stat = theme === 'golf' ? seasonStats[p.n] : null;
+                    return (
+                      <div className="rank-row" key={p.n}>
+                        <span className="num">{idx + 1}</span>
+                        <span className="name">
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
+                          {stat && (
+                            <span className="rank-substat">
+                              {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
+                              {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`delta ${d.cls}`}>{d.txt}</span>
+                        <span className="heat">{heatEmoji(p.h)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
           <button className="rank-expand" onClick={() => navigateTo('rankings')}>
             View full Top 100 →
@@ -1343,32 +1366,35 @@ export default function App() {
             ))}
           </div>
           <div className="full-rankings-grid">
-            {c.rankCols.map((label, i) => (
-              <div className="rank-col" key={label}>
-                <div className="col-label">{label}</div>
-                {rankColumnsFull[i].map((p, idx) => {
-                  const d = deltaLabel(p.d);
-                  const q = encodeURIComponent(p.n);
-                  const stat = theme === 'golf' ? seasonStats[p.n] : null;
-                  return (
-                    <div className="rank-row" key={p.n}>
-                      <span className="num">{idx + 1}</span>
-                      <span className="name">
-                        <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
-                        {stat && (
-                          <span className="rank-substat">
-                            {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
-                            {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
-                          </span>
-                        )}
-                      </span>
-                      <span className={`delta ${d.cls}`}>{d.txt}</span>
-                      <span className="heat">{heatEmoji(p.h)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+            {c.rankCols.map((label, i) => {
+              const isUnavailableWomensGolf = theme === 'golf' && i === 1 && !(liveColumnsBySport && liveColumnsBySport[1]);
+              return (
+                <div className="rank-col" key={label}>
+                  <div className="col-label">{label}</div>
+                  {isUnavailableWomensGolf ? <RolexDisclaimer /> : rankColumnsFull[i].map((p, idx) => {
+                    const d = deltaLabel(p.d);
+                    const q = encodeURIComponent(p.n);
+                    const stat = theme === 'golf' ? seasonStats[p.n] : null;
+                    return (
+                      <div className="rank-row" key={p.n}>
+                        <span className="num">{idx + 1}</span>
+                        <span className="name">
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
+                          {stat && (
+                            <span className="rank-substat">
+                              {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
+                              {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
+                            </span>
+                          )}
+                        </span>
+                        <span className={`delta ${d.cls}`}>{d.txt}</span>
+                        <span className="heat">{heatEmoji(p.h)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
