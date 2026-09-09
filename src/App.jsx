@@ -349,6 +349,24 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
+  const [seasonStats, setSeasonStats] = useState({}); // player_name -> { season_earnings, fedex_cup_points }
+
+  useEffect(() => {
+    if (theme !== 'golf') { setSeasonStats({}); return; }
+    let cancelled = false;
+    supabase
+      .from('gtw_season_stats')
+      .select('player_name, season_earnings, fedex_cup_points')
+      .eq('sport', 'golf')
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const map = {};
+        for (const row of data) map[row.player_name] = row;
+        setSeasonStats(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [theme]);
   const [spotlightPhoto, setSpotlightPhoto] = useState(null);
   const [spotlightDescription, setSpotlightDescription] = useState(null);
   const [spotlightStats, setSpotlightStats] = useState([]);
@@ -1007,11 +1025,18 @@ export default function App() {
                 {rankColumnsHome[i].map((p, idx) => {
                   const d = deltaLabel(p.d);
                   const q = encodeURIComponent(p.n);
+                  const stat = theme === 'golf' ? seasonStats[p.n] : null;
                   return (
                     <div className="rank-row" key={p.n}>
                       <span className="num">{idx + 1}</span>
                       <span className="name">
                         <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
+                        {stat && (
+                          <span className="rank-substat">
+                            {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
+                            {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
+                          </span>
+                        )}
                       </span>
                       <span className={`delta ${d.cls}`}>{d.txt}</span>
                       <span className="heat">{heatEmoji(p.h)}</span>
@@ -1244,11 +1269,18 @@ export default function App() {
                 {rankColumnsFull[i].map((p, idx) => {
                   const d = deltaLabel(p.d);
                   const q = encodeURIComponent(p.n);
+                  const stat = theme === 'golf' ? seasonStats[p.n] : null;
                   return (
                     <div className="rank-row" key={p.n}>
                       <span className="num">{idx + 1}</span>
                       <span className="name">
                         <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`} target="_blank" rel="noopener noreferrer">{p.n}</a>
+                        {stat && (
+                          <span className="rank-substat">
+                            {stat.season_earnings ? ` · $${(stat.season_earnings / 1000000).toFixed(2)}M` : ''}
+                            {stat.fedex_cup_points ? ` · ${Math.round(stat.fedex_cup_points)} FedEx pts` : ''}
+                          </span>
+                        )}
                       </span>
                       <span className={`delta ${d.cls}`}>{d.txt}</span>
                       <span className="heat">{heatEmoji(p.h)}</span>
