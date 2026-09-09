@@ -399,6 +399,12 @@ export default function App() {
   const [historySelection, setHistorySelection] = useState({ sport: 'golf', key: 'masters' });
 
   useEffect(() => {
+    setHistorySelection((prev) =>
+      prev.sport === theme ? prev : { sport: theme, key: theme === 'golf' ? 'masters' : 'australian_open' }
+    );
+  }, [theme]);
+
+  useEffect(() => {
     if (view !== 'majors') return;
     let cancelled = false;
     setHistoryData(null);
@@ -1536,16 +1542,20 @@ export default function App() {
             <h2>Majors &amp; History</h2>
           </div>
           <div className="period-toggle" style={{ flexWrap: 'wrap' }}>
-            {[
-              ['golf', 'masters', 'Masters'],
-              ['golf', 'pga_championship', 'PGA Champ.'],
-              ['golf', 'us_open', 'U.S. Open (Golf)'],
-              ['golf', 'open_championship', 'Open Champ.'],
-              ['tennis', 'australian_open', 'Australian Open'],
-              ['tennis', 'french_open', 'French Open'],
-              ['tennis', 'wimbledon', 'Wimbledon'],
-              ['tennis', 'us_open', 'US Open (Tennis)'],
-            ].map(([sport, key, label]) => (
+            {(theme === 'golf'
+              ? [
+                  ['golf', 'masters', 'Masters'],
+                  ['golf', 'pga_championship', 'PGA Championship'],
+                  ['golf', 'us_open', 'U.S. Open'],
+                  ['golf', 'open_championship', 'Open Championship'],
+                ]
+              : [
+                  ['tennis', 'australian_open', 'Australian Open'],
+                  ['tennis', 'french_open', 'French Open'],
+                  ['tennis', 'wimbledon', 'Wimbledon'],
+                  ['tennis', 'us_open', 'US Open'],
+                ]
+            ).map(([sport, key, label]) => (
               <button
                 key={key}
                 className={historySelection.sport === sport && historySelection.key === key ? 'active' : ''}
