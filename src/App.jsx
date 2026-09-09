@@ -499,26 +499,33 @@ export default function App() {
     if (theme === 'golf') {
       const champions = liveMajors.filter((r) => r.year === 2026 && r.status === 'completed');
       const upcoming = liveMajors.filter((r) => r.year === 2027);
+      const shapeUpcoming = (r) => ({
+        key: r.major_key, name: r.display_name, venue: r.venue_name || 'TBD',
+        when: r.start_date ? `${fmt(r.start_date)} – ${fmt(r.end_date)}` : 'Dates TBD',
+      });
       return {
         champions: {
           men: champions.filter((r) => r.gender === 'men'),
           women: champions.filter((r) => r.gender === 'women'),
         },
-        upcoming: upcoming.map((r) => ({
-          key: r.major_key, name: r.display_name, venue: r.venue_name || 'TBD',
-          when: r.start_date ? `${fmt(r.start_date)} – ${fmt(r.end_date)}` : 'Dates TBD',
-        })),
+        upcoming: {
+          men: upcoming.filter((r) => r.gender === 'men').map(shapeUpcoming),
+          women: upcoming.filter((r) => r.gender === 'women').map(shapeUpcoming),
+        },
         fmt, money,
       };
     }
 
     // Tennis: merge the men's and women's rows for the same event/year
-    // into one combined entry, since it's the same tournament.
+    // into one combined entry, since it's the same tournament (and the
+    // same prize purse — winnings are pulled from whichever row has them).
     const mergeByEvent = (rows) => {
       const byKey = {};
       for (const r of rows) {
-        byKey[r.major_key] ||= { key: r.major_key, name: r.display_name, venue: r.venue_name, start: r.start_date, end: r.end_date };
+        byKey[r.major_key] ||= { key: r.major_key, name: r.display_name, venue: r.venue_name, start: r.start_date, end: r.end_date, purse_total: null, winner_share: null };
         byKey[r.major_key][r.gender === 'men' ? 'menWinner' : 'womenWinner'] = r.winner_name;
+        if (r.purse_total) byKey[r.major_key].purse_total = r.purse_total;
+        if (r.winner_share) byKey[r.major_key].winner_share = r.winner_share;
       }
       return Object.values(byKey);
     };
@@ -1120,7 +1127,21 @@ export default function App() {
                 </div>
                 <div className="majors-block">
                   <div className="majors-block-label">2027 SCHEDULE — MEN'S</div>
-                  {majorsCorner.upcoming.map((r) => (
+                  {majorsCorner.upcoming.men.map((r) => (
+                    <div className="major-row" key={r.key}>
+                      <div className="major-name">{r.name}</div>
+                      <div className="major-detail">
+                        {r.venue !== 'TBD' ? (
+                          <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a>
+                        ) : 'Venue TBD'}
+                        {' · '}{r.when}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="majors-block">
+                  <div className="majors-block-label">2027 SCHEDULE — WOMEN'S</div>
+                  {majorsCorner.upcoming.women.map((r) => (
                     <div className="major-row" key={r.key}>
                       <div className="major-name">{r.name}</div>
                       <div className="major-detail">
@@ -1147,6 +1168,9 @@ export default function App() {
                         Men's: {r.menWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.menWinner)}`} target="_blank" rel="noopener noreferrer">{r.menWinner}</a> : 'TBD'}
                         {' · '}
                         Women's: {r.womenWinner ? <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.womenWinner)}`} target="_blank" rel="noopener noreferrer">{r.womenWinner}</a> : 'TBD'}
+                        {(r.purse_total || r.winner_share) && (
+                          <> · {majorsCorner.money(r.winner_share)} to each champion (purse {majorsCorner.money(r.purse_total)})</>
+                        )}
                       </div>
                     </div>
                   ))}
