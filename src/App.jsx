@@ -373,6 +373,24 @@ export default function App() {
   const [spotlightPageUrl, setSpotlightPageUrl] = useState(null);
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
+  const [tourCalendar, setTourCalendar] = useState(null);
+
+  useEffect(() => {
+    if (theme !== 'tennis') { setTourCalendar([]); return; }
+    let cancelled = false;
+    setTourCalendar(null);
+    supabase
+      .from('gtw_tour_calendar')
+      .select('*')
+      .order('start_date', { ascending: true })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setTourCalendar(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setTourCalendar([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
   const [liveLeaderboard, setLiveLeaderboard] = useState(null); // null = not loaded, [] = loaded-but-empty (golf only)
 
   const c = SAMPLE[theme];
@@ -1133,7 +1151,9 @@ export default function App() {
                       <div className="major-detail">
                         {r.venue !== 'TBD' ? (
                           <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a>
-                        ) : 'Venue TBD'}
+                        ) : (
+                          <a href="https://www.pgatour.com/schedule" target="_blank" rel="noopener noreferrer">Check PGA Tour schedule →</a>
+                        )}
                         {' · '}{r.when}
                       </div>
                     </div>
@@ -1147,7 +1167,9 @@ export default function App() {
                       <div className="major-detail">
                         {r.venue !== 'TBD' ? (
                           <a href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(r.venue)}`} target="_blank" rel="noopener noreferrer">{r.venue}</a>
-                        ) : 'Venue TBD'}
+                        ) : (
+                          <a href="https://www.lpga.com/schedule" target="_blank" rel="noopener noreferrer">Check LPGA schedule →</a>
+                        )}
                         {' · '}{r.when}
                       </div>
                     </div>
@@ -1364,6 +1386,39 @@ export default function App() {
                   : 'No upcoming matches loaded yet — check back after the next data pull.'}
               </p>
             </div>
+          )}
+
+          {theme === 'tennis' && (
+            <>
+              <div className="page-header" style={{ paddingTop: 30 }}>
+                <h2 style={{ fontSize: 20 }}>Full Season Calendar</h2>
+              </div>
+              {tourCalendar && tourCalendar.length > 0 ? (
+                <div className="headline-list">
+                  <div className="headline-list-label">ATP &amp; WTA · NEXT ~5 MONTHS</div>
+                  {tourCalendar.map((t, i) => {
+                    const when = t.start_date
+                      ? new Date(t.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                      : 'Date TBD';
+                    const q = encodeURIComponent(t.tournament_name);
+                    return (
+                      <a
+                        key={`${t.tour}-${t.tournament_name}-${t.start_date}`}
+                        href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`headline-row ${i % 2 === 0 ? 'even' : 'odd'}`}
+                      >
+                        <span className="headline-title">[{t.tour.toUpperCase()}] {t.tournament_name}</span>
+                        <span className="headline-source">{when} →</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="coming-soon"><p>Season calendar not loaded yet — check back after the next weekly pull.</p></div>
+              )}
+            </>
           )}
         </div>
       )}
