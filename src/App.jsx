@@ -395,6 +395,26 @@ export default function App() {
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
   const [tourCalendar, setTourCalendar] = useState(null);
   const [golfTourCalendar, setGolfTourCalendar] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [historySelection, setHistorySelection] = useState({ sport: 'golf', key: 'masters' });
+
+  useEffect(() => {
+    if (view !== 'majors') return;
+    let cancelled = false;
+    setHistoryData(null);
+    supabase
+      .from('gtw_history')
+      .select('*')
+      .eq('sport', historySelection.sport)
+      .eq('major_key', historySelection.key)
+      .order('year', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setHistoryData(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setHistoryData([]); });
+    return () => { cancelled = true; };
+  }, [view, historySelection]);
 
   useEffect(() => {
     if (theme !== 'golf') { setGolfTourCalendar([]); return; }
@@ -898,10 +918,7 @@ export default function App() {
               ['rankings', 'Rankings'],
               ['schedule', 'Schedule'],
               ['majors', 'Majors & History'],
-              ['amateur', 'Amateur'],
-              ['tutorials', 'Tutorials'],
-              ['trivia', 'Trivia'],
-              ['tv', 'TV Schedule'],
+              ['reference', 'Reference'],
             ].map(([key, label]) => (
               <a
                 key={key}
@@ -1512,21 +1529,103 @@ export default function App() {
         </div>
       )}
 
-      {['majors', 'amateur', 'tutorials', 'trivia', 'tv'].includes(view) && (
+      {view === 'majors' && (
         <div className="wrap">
           <div className="page-header">
             <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
-            <h2>{{
-              majors: 'Majors & History',
-              amateur: 'Amateur',
-              tutorials: 'Tutorials',
-              trivia: 'Trivia',
-              tv: 'TV Schedule',
-            }[view]}</h2>
+            <h2>Majors &amp; History</h2>
           </div>
-          <div className="coming-soon">
-            <p>This section is still being built — check back soon.</p>
+          <div className="period-toggle" style={{ flexWrap: 'wrap' }}>
+            {[
+              ['golf', 'masters', 'Masters'],
+              ['golf', 'pga_championship', 'PGA Champ.'],
+              ['golf', 'us_open', 'U.S. Open (Golf)'],
+              ['golf', 'open_championship', 'Open Champ.'],
+              ['tennis', 'australian_open', 'Australian Open'],
+              ['tennis', 'french_open', 'French Open'],
+              ['tennis', 'wimbledon', 'Wimbledon'],
+              ['tennis', 'us_open', 'US Open (Tennis)'],
+            ].map(([sport, key, label]) => (
+              <button
+                key={key}
+                className={historySelection.sport === sport && historySelection.key === key ? 'active' : ''}
+                onClick={() => setHistorySelection({ sport, key })}
+              >
+                {label}
+              </button>
+            ))}
           </div>
+          {historyData === null ? (
+            <div className="coming-soon"><p>Loading…</p></div>
+          ) : historyData.length > 0 ? (
+            <div className="headline-list">
+              <div className="headline-list-label">{historyData[0].tournament_name.toUpperCase()} — CHAMPIONS BY YEAR</div>
+              {historyData.map((h, i) => {
+                const q = encodeURIComponent(h.winner_name);
+                return (
+                  <a
+                    key={`${h.year}-${h.winner_name}`}
+                    href={`https://en.wikipedia.org/wiki/Special:Search?search=${q}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`headline-row ${i % 2 === 0 ? 'even' : 'odd'}`}
+                  >
+                    <span className="headline-title">{h.year} — {h.winner_name}{h.country ? ` (${h.country})` : ''}</span>
+                    <span className="headline-source">Wiki →</span>
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="coming-soon">
+              <p>Full year-by-year history for this event hasn't been built yet — same approach as Masters (above), just needs its own pass. Check back soon.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'reference' && (
+        <div className="wrap">
+          <div className="page-header">
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
+            <h2>Reference</h2>
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">OFFICIAL SITES</div>
+            {(theme === 'golf'
+              ? [['PGA Tour', 'https://www.pgatour.com'], ['LPGA', 'https://www.lpga.com'], ['The Masters', 'https://www.masters.com'], ['USGA', 'https://www.usga.org'], ['The R&A', 'https://www.randa.org']]
+              : [['ATP Tour', 'https://www.atptour.com'], ['WTA', 'https://www.wtatennis.com'], ['ITF', 'https://www.itftennis.com'], ['Australian Open', 'https://ausopen.com'], ['Roland-Garros', 'https://www.rolandgarros.com'], ['Wimbledon', 'https://www.wimbledon.com'], ['US Open', 'https://www.usopen.org']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">BLOGS &amp; FAN SITES</div>
+            {(theme === 'golf'
+              ? [['Golf Digest', 'https://www.golfdigest.com'], ['Golf.com', 'https://golf.com'], ['Golf Monthly', 'https://www.golfmonthly.com'], ['No Laying Up', 'https://nolayingup.com']]
+              : [['Tennis.com', 'https://www.tennis.com'], ['Tennis Channel', 'https://www.tennischannel.com'], ['r/tennis', 'https://www.reddit.com/r/tennis']]
+            ).map(([label, url]) => (
+              <div className="major-row" key={label}>
+                <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
+              </div>
+            ))}
+          </div>
+
+          {[
+            ['TV Schedule', 'Where to watch this week\'s coverage — see the Schedule tab for real tournament dates and times; broadcast/channel info is still a manual build.'],
+            ['Amateur', 'US Amateur, NCAA golf/tennis, junior Slams — real content, not yet built.'],
+            ['Trivia', 'Golf and tennis trivia questions — real content, not yet built.'],
+            ['Tutorials', 'How to play, how to get better — evergreen content, not yet written.'],
+          ].map(([title, desc]) => (
+            <div className="majors-block" style={{ marginBottom: 20 }} key={title}>
+              <div className="majors-block-label">{title.toUpperCase()}</div>
+              <div className="major-row"><div className="major-detail">{desc}</div></div>
+            </div>
+          ))}
         </div>
       )}
 
