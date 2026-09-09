@@ -124,16 +124,22 @@ async function fetchGolfWorldRankings(season = new Date().getFullYear()) {
 // ---------------------------------------------------------------------
 async function fetchWomensGolfRankings() {
   // Vercel's own IP range appears to be blocked by Rolex Rankings'
-  // hosting-provider bot protection (headers alone didn't fix it) —
-  // routing through the same CORS-proxy trick already used elsewhere
-  // in the site family, since it fetches from a different origin.
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ROLEX_RANKINGS_URL)}`;
+  // hosting-provider bot protection — direct fetch, browser headers,
+  // and the allorigins.win proxy have all failed with different errors
+  // (403, 500, 522), suggesting real bot-protection infrastructure
+  // (likely Cloudflare) rather than a simple missing-header issue.
+  // Trying Jina AI's reader proxy (r.jina.ai) next — a different
+  // service built specifically to render pages that block typical
+  // scraping, requesting raw HTML so the existing table-parsing logic
+  // below still works unchanged.
+  const proxyUrl = `https://r.jina.ai/${ROLEX_RANKINGS_URL}`;
   const res = await fetch(proxyUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'X-Return-Format': 'html',
     },
   });
-  if (!res.ok) throw new Error(`Rolex Rankings fetch failed via proxy (${res.status})`);
+  if (!res.ok) throw new Error(`Rolex Rankings fetch failed via Jina proxy (${res.status})`);
   const html = await res.text();
   const $ = cheerio.load(html);
 
