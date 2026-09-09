@@ -468,12 +468,12 @@
   }
 
   /* ---------- Players (folded into home) ---------- */
-  .player-search {
+  .player-search-inline {
     display: flex;
     gap: 10px;
-    margin-bottom: 16px;
+    margin-top: 14px;
   }
-  .player-search input {
+  .player-search-inline input {
     flex: 1;
     padding: 10px 14px;
     border: 1px solid var(--ink);
@@ -481,40 +481,13 @@
     font-family: 'PT Serif', serif;
     font-size: 14px;
   }
-  .player-search button {
+  .player-search-inline button {
     font-family: 'Oswald', sans-serif;
     background: var(--ink);
     color: var(--paper);
     border: none;
     padding: 0 18px;
     cursor: pointer;
-  }
-  .player-cards {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-  }
-  .player-card {
-    border: 1px solid var(--line);
-    padding: 12px;
-    text-align: center;
-  }
-  .player-card .avatar {
-    width: 48px; height: 48px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    margin: 0 auto 8px;
-    display: block;
-  }
-  .player-card .name { font-family: 'Oswald', sans-serif; font-size: 13.5px; }
-  .player-card .rank { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); margin-bottom: 8px; }
-  .player-links { display: flex; justify-content: center; gap: 8px; }
-  .player-links a {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    text-decoration: none;
-    color: var(--accent);
-    border-bottom: 1px dotted var(--accent);
   }
 
   /* ---------- News feed ---------- */
@@ -612,6 +585,24 @@
     border-bottom: 1px dashed var(--line);
   }
   .major-row:last-child { border-bottom: none; }
+  .major-row-with-photo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .major-photo-pair {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .avatar-small {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    display: block;
+  }
   .major-name {
     font-family: 'Oswald', sans-serif;
     font-weight: 600;
@@ -759,7 +750,6 @@
     .tourney-strip, .rankings-grid, .news-grid { grid-template-columns: 1fr; }
     .top-story { grid-template-columns: 1fr; }
     .top-story .thumb-large { height: 110px; }
-    .player-cards { grid-template-columns: repeat(2, 1fr); }
     .week-nav { flex-wrap: wrap; gap: 8px; justify-content: center; }
     .week-nav button { min-height: 40px; padding: 8px 14px; }
     .player-search button { min-height: 44px; padding: 0 20px; }
@@ -770,6 +760,5 @@
   }
   @media (max-width: 420px) {
     .rank-row { font-size: 13px; }
-    .player-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
     .toggle button { padding: 10px 14px; font-size: 13px; }
   }
