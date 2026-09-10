@@ -3,14 +3,16 @@
 // The weekly Tuesday send. Fires via cron (see vercel.json) or can be
 // triggered manually: /api/send-digest?secret=YOUR_SECRET
 //
-// This is the CORE version — personalization by sport preference,
-// recap/preview from live data, the week's feature article (teaser +
-// link to the full piece on-site), a dynamic subject line, and a
-// duplicate-send guard. Deliberately does NOT yet include trivia,
-// the legend/history spotlight, a tutorial tip, or venue weather —
-// those are real planned additions, but layering them in after this
-// core version is proven on a real send is safer than shipping one
-// giant untested file for the very first email that actually goes out.
+// Includes: personalization by sport preference, recap/preview from
+// live data, the week's feature article (teaser + link to the full
+// piece on-site), a real "this week in history" or rotating legend
+// spotlight (with a deep link to that player's own trading card on
+// the site), a dynamic subject line, and a duplicate-send guard.
+//
+// Still deliberately NOT included: trivia and a tutorial tip. Both
+// are real, planned additions — layering them in once this version
+// is proven on a real send is safer than growing the file further
+// before the first actual email goes out.
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,6 +20,53 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const RESEND_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = 'newsletter@gtw.nysportsdaily.com';
+
+// gtw_history only has complete year-by-year champion data for the 8
+// actual majors (4 golf, 4 tennis) — not the Players Championship,
+// Ryder/Presidents Cup, Davis Cup, or Skins Game, since those never
+// got a full historical seed, only current-year rows in gtw_majors.
+// So "this week in history" is only ever genuinely real during these
+// months; every other month correctly falls back to the rotating
+// spotlight below rather than faking a date match that isn't real.
+const GOLF_MAJOR_MONTHS = { 4: 'masters', 5: 'pga_championship', 6: 'us_open', 7: 'open_championship' };
+const TENNIS_MAJOR_MONTHS = { 1: 'australian_open', 5: 'french_open', 6: 'wimbledon', 7: 'wimbledon', 8: 'us_open', 9: 'us_open' };
+
+async function getHistorySpotlight(supabase, sport) {
+  const month = new Date().getUTCMonth() + 1; // 1-12
+  const majorMap = sport === 'golf' ? GOLF_MAJOR_MONTHS : TENNIS_MAJOR_MONTHS;
+  const majorKey = majorMap[month];
+
+  if (majorKey) {
+    // Real date-matched history: pull every champion of this specific
+    // major and pick one deterministically by week-of-year, so it
+    // rotates through real history rather than showing the same name
+    // every time this month comes around.
+    const { data } = await supabase
+      .from('gtw_history')
+      .select('*')
+      .eq('sport', sport)
+      .eq('major_key', majorKey)
+      .order('year', { ascending: true });
+    if (data && data.length > 0) {
+      const weekOfYear = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 1)) / (7 * 86400000));
+      const pick = data[weekOfYear % data.length];
+      return { ...pick, isDateMatched: true };
+    }
+  }
+
+  // Rotating spotlight: no major genuinely happening this month, so
+  // pull from the full history pool across all majors for this sport
+  // instead — framed as a spotlight, not a false "this week" claim.
+  const { data: allHistory } = await supabase
+    .from('gtw_history')
+    .select('*')
+    .eq('sport', sport)
+    .order('year', { ascending: true });
+  if (!allHistory || allHistory.length === 0) return null;
+  const weekOfYear = Math.floor((Date.now() - new Date(new Date().getUTCFullYear(), 0, 1)) / (7 * 86400000));
+  const pick = allHistory[weekOfYear % allHistory.length];
+  return { ...pick, isDateMatched: false };
+}
 const SITE_URL = 'https://golf-tennis-weekly.vercel.app';
 
 function excerptWords(body, wordCount) {
@@ -85,7 +134,7 @@ async function getRecapAndPreview(supabase, sport) {
   return { recap, preview };
 }
 
-function buildSportSection(sport, { recap, preview, feature }) {
+function buildSportSection(sport, { recap, preview, feature, spotlight }) {
   const emoji = sport === 'golf' ? '⛳' : '🎾';
   const label = sport === 'golf' ? "Bird's Eye View" : 'Hawkeye';
 
@@ -107,6 +156,18 @@ function buildSportSection(sport, { recap, preview, feature }) {
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">📅 Coming Up</div>`;
     html += `<div style="font-size:14px;color:#444;line-height:1.6">${preview.tournament_name} — ${new Date(preview.start_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</div>`;
     html += `</div>`;
+  }
+
+  if (spotlight) {
+    const spotlightLabel = spotlight.isDateMatched ? '📖 THIS WEEK IN HISTORY' : '🏅 LEGEND SPOTLIGHT';
+    const searchUrl = `${SITE_URL}/#search-${encodeURIComponent(spotlight.winner_name)}`;
+    html += `<div style="margin-bottom:18px">`;
+    html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">${spotlightLabel}</div>`;
+    html += `<div style="font-size:14px;color:#444;line-height:1.6">`;
+    html += `${spotlight.year} — <strong>${spotlight.winner_name}</strong> won the ${spotlight.tournament_name}`;
+    if (spotlight.country) html += ` (${spotlight.country})`;
+    html += ` &nbsp;<a href="${searchUrl}" style="color:#c97a2b;text-decoration:none;font-size:12px">🔍 Learn more →</a>`;
+    html += `</div></div>`;
   }
 
   if (feature) {
@@ -167,6 +228,8 @@ export default async function handler(req, res) {
     const tennisContent = await getRecapAndPreview(supabase, 'tennis');
     golfContent.feature = await getNextUnsentFeature(supabase, 'golf');
     tennisContent.feature = await getNextUnsentFeature(supabase, 'tennis');
+    golfContent.spotlight = await getHistorySpotlight(supabase, 'golf');
+    tennisContent.spotlight = await getHistorySpotlight(supabase, 'tennis');
 
     if (!golfContent.feature && !tennisContent.feature && !golfContent.recap && !tennisContent.recap) {
       return res.status(200).json({ skipped: true, reason: 'No content available to send this week.' });
