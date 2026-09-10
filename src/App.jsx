@@ -103,6 +103,73 @@ function RolexDisclaimer() {
   );
 }
 
+// Feature articles are written in plain markdown (headers, bold, italic,
+// links, horizontal rules) but this project has no markdown-parser
+// dependency in package.json, and adding one means Mike has to run npm
+// install locally rather than just copy-pasting a file — so these are
+// small hand-rolled renderers covering only the patterns our own pieces
+// actually use, not a general-purpose markdown engine.
+function renderInline(text, keyPrefix) {
+  // Splits a line into text/bold/italic/link fragments, in that priority
+  // order, without pulling in a real markdown library.
+  const parts = [];
+  let remaining = text;
+  let i = 0;
+  const linkRe = /\[([^\]]+)\]\(([^)]+)\)/;
+  const boldRe = /\*\*([^*]+)\*\*/;
+  const italicRe = /\*([^*]+)\*/;
+  while (remaining.length > 0) {
+    const linkMatch = remaining.match(linkRe);
+    const boldMatch = remaining.match(boldRe);
+    const italicMatch = remaining.match(italicRe);
+    const candidates = [
+      linkMatch && { match: linkMatch, type: 'link' },
+      boldMatch && { match: boldMatch, type: 'bold' },
+      italicMatch && { match: italicMatch, type: 'italic' },
+    ].filter(Boolean).sort((a, b) => a.match.index - b.match.index);
+    if (candidates.length === 0) {
+      parts.push(remaining);
+      break;
+    }
+    const { match, type } = candidates[0];
+    if (match.index > 0) parts.push(remaining.slice(0, match.index));
+    if (type === 'link') {
+      parts.push(<a key={`${keyPrefix}-${i++}`} href={match[2]} target="_blank" rel="noopener noreferrer">{match[1]}</a>);
+    } else if (type === 'bold') {
+      parts.push(<strong key={`${keyPrefix}-${i++}`}>{match[1]}</strong>);
+    } else {
+      parts.push(<em key={`${keyPrefix}-${i++}`}>{match[1]}</em>);
+    }
+    remaining = remaining.slice(match.index + match[0].length);
+  }
+  return parts;
+}
+
+function renderMarkdownLite(body) {
+  const blocks = body.split(/\n\n+/);
+  return blocks.map((block, i) => {
+    const trimmed = block.trim();
+    if (trimmed === '---') return <hr key={i} className="feature-hr" />;
+    if (trimmed.startsWith('## ')) return <h2 key={i} className="feature-h2">{renderInline(trimmed.slice(3), `h${i}`)}</h2>;
+    if (trimmed.startsWith('# ')) return null; // title is rendered separately above the body
+    if (!trimmed) return null;
+    return <p key={i} className="feature-p">{renderInline(trimmed, `p${i}`)}</p>;
+  });
+}
+
+function excerptWords(body, wordCount) {
+  const plain = body
+    .replace(/^#.*$/m, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/---/g, '')
+    .replace(/##/g, '')
+    .trim();
+  const words = plain.split(/\s+/).filter(Boolean);
+  return words.slice(0, wordCount).join(' ') + (words.length > wordCount ? '…' : '');
+}
+
 function heatEmoji(h) {
   if (h === 'hot') return '🔥';
   if (h === 'cold') return '🧊';
@@ -475,7 +542,10 @@ function DispatchCard({ name, fact, tag, theme }) {
 export default function App() {
   const [theme, setTheme] = useState('golf');
   const [period, setPeriod] = useState('wk');
-  const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'amateur' | 'tutorials' | 'trivia' | 'tv'
+  const [view, setView] = useState('home'); // 'home' | 'rankings' | 'majors' | 'reference' | 'feature-detail' | ...
+  const [featureSlug, setFeatureSlug] = useState(null);
+  const [currentFeature, setCurrentFeature] = useState(null); // null = loading, false = not found/not yet sent
+  const [featuresList, setFeaturesList] = useState(null);
 
   // Real navigation: every view change gets a browser history entry, so
   // the native back button moves between views instead of exiting the
@@ -484,18 +554,76 @@ export default function App() {
   // of ours to go back to).
   const navigateTo = (newView) => {
     setView(newView);
+    setFeatureSlug(null);
     window.history.pushState({ gtwView: newView }, '', `#${newView === 'home' ? '' : newView}`);
   };
 
+  const navigateToFeature = (slug) => {
+    setView('feature-detail');
+    setFeatureSlug(slug);
+    window.history.pushState({ gtwView: 'feature-detail', slug }, '', `#feature-${slug}`);
+  };
+
   useEffect(() => {
-    // Establish the initial history entry once, on first load.
-    window.history.replaceState({ gtwView: 'home' }, '', window.location.pathname);
+    // Read whatever hash the page actually loaded with — critical for
+    // direct links (e.g. from the newsletter) to actually land on the
+    // right piece instead of always bouncing to Home. Previously this
+    // unconditionally forced 'home' and wiped the hash on every load,
+    // which would have silently broken every email link.
+    const rawHash = window.location.hash.replace(/^#/, '');
+    const featureMatch = rawHash.match(/^feature-(.+)$/);
+    if (featureMatch) {
+      setView('feature-detail');
+      setFeatureSlug(featureMatch[1]);
+      window.history.replaceState({ gtwView: 'feature-detail', slug: featureMatch[1] }, '', window.location.hash);
+    } else if (rawHash) {
+      setView(rawHash);
+      window.history.replaceState({ gtwView: rawHash }, '', window.location.hash);
+    } else {
+      window.history.replaceState({ gtwView: 'home' }, '', window.location.pathname);
+    }
     const onPopState = (e) => {
       setView(e.state?.gtwView || 'home');
+      setFeatureSlug(e.state?.slug || null);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
+
+  useEffect(() => {
+    if (view !== 'feature-detail' || !featureSlug) return;
+    let cancelled = false;
+    setCurrentFeature(null);
+    supabase
+      .from('gtw_features')
+      .select('*')
+      .eq('slug', featureSlug)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!cancelled) setCurrentFeature(error || !data ? false : data);
+      })
+      .catch(() => { if (!cancelled) setCurrentFeature(false); });
+    return () => { cancelled = true; };
+  }, [view, featureSlug]);
+
+  useEffect(() => {
+    // Archive list — only ever shows features that have actually been
+    // sent (sent_on not null), enforced at the database level via RLS,
+    // not just by this query.
+    let cancelled = false;
+    setFeaturesList(null);
+    supabase
+      .from('gtw_features')
+      .select('sport, title, slug, body, published_date, sent_on')
+      .eq('sport', theme)
+      .order('sent_on', { ascending: false })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (!cancelled) setFeaturesList(error || !data ? [] : data);
+      })
+      .catch(() => { if (!cancelled) setFeaturesList([]); });
+    return () => { cancelled = true; };
+  }, [theme]);
   const [liveRankings, setLiveRankings] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [seasonStats, setSeasonStats] = useState({}); // player_name -> { season_earnings, fedex_cup_points }
 
@@ -1629,6 +1757,28 @@ export default function App() {
         </div>
       )}
 
+      {view === 'feature-detail' && (
+        <div className="wrap">
+          <div className="page-header">
+            <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
+          </div>
+          {currentFeature === null ? (
+            <div className="coming-soon"><p>Loading…</p></div>
+          ) : currentFeature === false ? (
+            <div className="coming-soon">
+              <p>This piece isn't available — either the link is wrong, or it hasn't been published yet.</p>
+            </div>
+          ) : (
+            <article className="feature-article">
+              <div className="feature-kicker">{currentFeature.sport === 'golf' ? '⛳ BIRD\'S EYE VIEW' : '🎾 HAWKEYE'}</div>
+              <h1 className="feature-title">{currentFeature.title}</h1>
+              <div className="feature-date">{new Date(currentFeature.sent_on || currentFeature.published_date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+              <div className="feature-body">{renderMarkdownLite(currentFeature.body)}</div>
+            </article>
+          )}
+        </div>
+      )}
+
       {view === 'reference' && (
         <div className="wrap">
           <div className="page-header">
@@ -1708,6 +1858,23 @@ export default function App() {
                 <a href={url} target="_blank" rel="noopener noreferrer" className="major-name" style={{ textDecoration: 'none' }}>{label} →</a>
               </div>
             ))}
+          </div>
+
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            <div className="majors-block-label">{theme === 'golf' ? "BIRD'S EYE VIEW — FROM THE NEWSLETTER" : 'HAWKEYE — FROM THE NEWSLETTER'}</div>
+            {featuresList === null ? (
+              <div className="major-row"><div className="major-detail">Loading…</div></div>
+            ) : featuresList.length === 0 ? (
+              <div className="major-row"><div className="major-detail">Nothing published yet — check back after the first newsletter goes out.</div></div>
+            ) : (
+              featuresList.map((f) => (
+                <div className="major-row feature-preview-row" key={f.slug}>
+                  <div className="major-name">{f.title}</div>
+                  <div className="major-detail">{excerptWords(f.body, 150)}</div>
+                  <a href="#" className="feature-read-more" onClick={(e) => { e.preventDefault(); navigateToFeature(f.slug); }}>Read full piece →</a>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
