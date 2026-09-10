@@ -572,10 +572,17 @@ export default function App() {
     // which would have silently broken every email link.
     const rawHash = window.location.hash.replace(/^#/, '');
     const featureMatch = rawHash.match(/^feature-(.+)$/);
+    const searchMatch = rawHash.match(/^search-(.+)$/);
     if (featureMatch) {
       setView('feature-detail');
       setFeatureSlug(featureMatch[1]);
       window.history.replaceState({ gtwView: 'feature-detail', slug: featureMatch[1] }, '', window.location.hash);
+    } else if (searchMatch) {
+      const name = decodeURIComponent(searchMatch[1].replace(/\+/g, ' '));
+      setView('home');
+      setSearchedPlayerName(name);
+      setPlayerSearchInput(name);
+      window.history.replaceState({ gtwView: 'home' }, '', window.location.hash);
     } else if (rawHash) {
       setView(rawHash);
       window.history.replaceState({ gtwView: rawHash }, '', window.location.hash);
