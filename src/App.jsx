@@ -657,6 +657,9 @@ export default function App() {
   const [signupName, setSignupName] = useState('');
   const [signupSports, setSignupSports] = useState(['golf', 'tennis']);
   const [signupStatus, setSignupStatus] = useState(null); // null | 'sending' | 'ok' | 'error'
+  const [showUnsubBox, setShowUnsubBox] = useState(false);
+  const [unsubEmail, setUnsubEmail] = useState('');
+  const [unsubStatus, setUnsubStatus] = useState(null); // null | 'sending' | 'done'
 
   const toggleSignupSport = (sport) => {
     setSignupSports((prev) =>
@@ -677,6 +680,18 @@ export default function App() {
     } catch {
       setSignupStatus('error');
     }
+  };
+
+  const submitUnsubscribe = async () => {
+    if (!unsubEmail.includes('@')) return;
+    setUnsubStatus('sending');
+    try {
+      await fetch(`/api/unsubscribe?email=${encodeURIComponent(unsubEmail)}`);
+    } catch {
+      // The endpoint always shows a friendly result either way -
+      // no need to branch on success/failure here.
+    }
+    setUnsubStatus('done');
   };
   const [liveNews, setLiveNews] = useState(null); // null = not loaded yet, [] = loaded-but-empty
   const [liveMatches, setLiveMatches] = useState(null); // null = not loaded, [] = loaded-but-empty (tennis only for now)
@@ -1924,6 +1939,26 @@ export default function App() {
               {signupStatus === 'error' && <p className="newsletter-error">Something went wrong — check your email address and try again.</p>}
             </>
           )}
+
+          <div className="unsub-toggle-row">
+            {!showUnsubBox ? (
+              <a href="#" onClick={(e) => { e.preventDefault(); setShowUnsubBox(true); }}>Already subscribed and want to leave the list?</a>
+            ) : unsubStatus === 'done' ? (
+              <p className="newsletter-confirm" style={{ fontSize: 13 }}>Done — if that email was subscribed, it's been removed.</p>
+            ) : (
+              <div className="newsletter-row" style={{ marginTop: 10 }}>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={unsubEmail}
+                  onChange={(e) => setUnsubEmail(e.target.value)}
+                />
+                <button className="newsletter-submit" onClick={submitUnsubscribe} disabled={unsubStatus === 'sending'}>
+                  {unsubStatus === 'sending' ? 'Removing…' : 'Unsubscribe'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
