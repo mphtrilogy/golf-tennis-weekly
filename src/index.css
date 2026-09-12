@@ -837,6 +837,17 @@
     font-size: 13px;
     margin: 10px 0 0;
   }
+  .unsub-toggle-row {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  .unsub-toggle-row a {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    text-decoration: underline;
+  }
   @media (max-width: 480px) {
     .newsletter-row { flex-direction: column; }
   }
