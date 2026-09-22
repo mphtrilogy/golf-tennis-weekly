@@ -372,6 +372,7 @@ async function getTopNews(supabase, sport, limit = 5) {
 function buildSportSection(sport, { recap, preview, feature, spotlight, tip, recapPhoto, spotlightPhoto, news, trivia, rankings, fedexStandings, movers, moversATP, moversWTA, liveATP, liveWTA }) {
   const emoji = sport === 'golf' ? '⛳' : '🎾';
   const label = sport === 'golf' ? "Bird's Eye View" : 'Hawkeye';
+  const divider = 'margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #e5e0d0';
 
   let html = `<div style="margin-bottom:32px">`;
   html += `<h2 style="font-family:Georgia,serif;font-size:20px;color:#14181f;border-bottom:2px solid #c97a2b;padding-bottom:8px;margin-bottom:16px">${emoji} ${sport === 'golf' ? 'Golf' : 'Tennis'}</h2>`;
@@ -381,7 +382,7 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   html += `</div>`;
 
   if (news && news.length > 0) {
-    html += `<div style="margin-bottom:18px">`;
+    html += `<div style="${divider}">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:8px">📰 In the News</div>`;
     for (const item of news) {
       html += `<div style="font-size:13px;color:#444;line-height:1.5;margin-bottom:6px">`;
@@ -394,7 +395,7 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
 
   const liveMatches = [...(liveATP || []), ...(liveWTA || [])];
   if (liveMatches.length > 0) {
-    html += `<div style="margin-bottom:18px;background:#fff8e8;border-left:3px solid #c97a2b;padding:10px 14px">`;
+    html += `<div style="${divider};background:#fff8e8;border-left:3px solid #c97a2b;padding:10px 14px 18px">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:14px;color:#14181f;margin-bottom:6px">🔴 LIVE</div>`;
     for (const m of liveMatches) {
       const surface = getSurfaceFor(m.tournament_name);
@@ -407,7 +408,7 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   }
 
   if (recap) {
-    html += `<div style="margin-bottom:18px;display:flex;align-items:center;gap:12px">`;
+    html += `<div style="${divider};display:flex;align-items:center;gap:12px">`;
     if (recapPhoto) html += `<img src="${recapPhoto}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid #e0dccf;flex-shrink:0">`;
     html += `<div>`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">🏆 <a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(recap.display_name || '')}" style="color:#14181f;text-decoration:none">${recap.display_name || 'Last Major'}</a></div>`;
@@ -420,7 +421,7 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   }
 
   if (preview && preview.length > 0) {
-    html += `<div style="margin-bottom:18px">`;
+    html += `<div style="${divider}">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:6px">📅 Coming Up</div>`;
     for (const p of preview) {
       const surface = sport === 'tennis' ? getSurfaceFor(p.tournament_name) : null;
@@ -431,8 +432,8 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   }
 
   if (rankings && (rankings.men || rankings.women)) {
-    html += `<div style="margin-bottom:18px">`;
-    html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:6px">📊 Rankings</div>`;
+    html += `<div style="${divider}">`;
+    html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:6px">📊 Rankings &nbsp;<a href="${SITE_URL}/#rankings" style="color:#c97a2b;text-decoration:none;font-size:12px;font-weight:normal">See full Top 100 →</a></div>`;
     for (const col of [rankings.men, rankings.women]) {
       if (!col) continue;
       html += `<div style="font-size:12px;color:#888;margin:8px 0 4px">${col.label}</div>`;
@@ -440,7 +441,8 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
         html += `<div style="font-size:13px;color:#444;line-height:1.5">Can't be automated — <a href="${col.url}" style="color:#c97a2b;text-decoration:none">see the real rankings →</a></div>`;
       } else {
         for (const p of col.players) {
-          html += `<div style="font-size:14px;color:#444;line-height:1.5">${p.rank}. ${p.player_name}</div>`;
+          const pUrl = `${SITE_URL}/#search-${encodeURIComponent(p.player_name)}`;
+          html += `<div style="font-size:14px;color:#444;line-height:1.5">${p.rank}. <a href="${pUrl}" style="color:#14181f;text-decoration:none">${p.player_name}</a></div>`;
         }
       }
     }
@@ -449,21 +451,23 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
 
   const allMovers = sport === 'golf' ? (movers || []) : [...(moversATP || []), ...(moversWTA || [])];
   if (allMovers.length > 0) {
-    html += `<div style="margin-bottom:18px">`;
+    html += `<div style="${divider}">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:6px">📈 Movers This Week</div>`;
     for (const m of allMovers) {
       const emoji = m.direction === 'up' ? '🔥' : '🧊';
       const arrow = m.direction === 'up' ? '▲' : '▼';
-      html += `<div style="font-size:14px;color:#444;line-height:1.5">${emoji} ${m.name} ${arrow}${m.delta}</div>`;
+      const mUrl = `${SITE_URL}/#search-${encodeURIComponent(m.name)}`;
+      html += `<div style="font-size:14px;color:#444;line-height:1.5">${emoji} <a href="${mUrl}" style="color:#14181f;text-decoration:none">${m.name}</a> ${arrow}${m.delta}</div>`;
     }
     html += `</div>`;
   }
 
   if (fedexStandings && fedexStandings.length > 0) {
-    html += `<div style="margin-bottom:18px">`;
+    html += `<div style="${divider}">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:6px">🏆 FedEx Cup Standings</div>`;
     fedexStandings.forEach((p, i) => {
-      html += `<div style="font-size:14px;color:#444;line-height:1.5">${i + 1}. ${p.player_name} — ${Math.round(p.fedex_cup_points || 0)} pts`;
+      const fUrl = `${SITE_URL}/#search-${encodeURIComponent(p.player_name)}`;
+      html += `<div style="font-size:14px;color:#444;line-height:1.5">${i + 1}. <a href="${fUrl}" style="color:#14181f;text-decoration:none">${p.player_name}</a> — ${Math.round(p.fedex_cup_points || 0)} pts`;
       if (p.season_earnings) html += ` · $${(p.season_earnings / 1000000).toFixed(2)}M`;
       html += `</div>`;
     });
@@ -473,20 +477,20 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   if (spotlight) {
     const spotlightLabel = spotlight.isDateMatched ? '📖 THIS WEEK IN HISTORY' : '🏅 LEGEND SPOTLIGHT';
     const searchUrl = `${SITE_URL}/#search-${encodeURIComponent(spotlight.winner_name)}`;
-    html += `<div style="margin-bottom:18px;display:flex;align-items:center;gap:12px">`;
+    html += `<div style="${divider};display:flex;align-items:center;gap:12px">`;
     if (spotlightPhoto) html += `<img src="${spotlightPhoto}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid #e0dccf;flex-shrink:0">`;
     html += `<div>`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">${spotlightLabel}</div>`;
     html += `<div style="font-size:14px;color:#444;line-height:1.6">`;
     html += `${spotlight.year} — <strong>${spotlight.winner_name}</strong> won the ${spotlight.tournament_name}`;
     if (spotlight.country) html += ` (${spotlight.country})`;
-    html += ` &nbsp;<a href="${searchUrl}" style="color:#c97a2b;text-decoration:none;font-size:12px">🔍 Learn more →</a>`;
+    html += ` &nbsp;<a href="${searchUrl}" style="color:#c97a2b;text-decoration:none;font-size:12px">🔍 See ${spotlight.winner_name.split(' ')[0]}'s profile →</a>`;
     html += `</div></div></div>`;
   }
 
   if (feature) {
     const excerpt = excerptWords(feature.body, 150);
-    html += `<div style="background:#f8f6f0;border-left:4px solid #c97a2b;padding:16px 18px;margin-bottom:8px">`;
+    html += `<div style="background:#f8f6f0;border-left:4px solid #c97a2b;padding:16px 18px;margin-bottom:18px">`;
     html += `<div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#c97a2b;margin-bottom:6px">${label.toUpperCase()}</div>`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:16px;color:#14181f;margin-bottom:8px">${feature.title}</div>`;
     html += `<div style="font-size:14px;color:#444;line-height:1.65;margin-bottom:12px">${excerpt}</div>`;
@@ -495,14 +499,14 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   }
 
   if (tip) {
-    html += `<div style="margin-bottom:8px">`;
+    html += `<div style="${divider}">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">🎯 This Week's Tip: ${tip.topic}</div>`;
     html += `<div style="font-size:14px;color:#444;line-height:1.6">Sharpen up your ${tip.topic.toLowerCase()} this week — <a href="${tip.url}" style="color:#c97a2b;text-decoration:none">${tip.source}'s full archive →</a></div>`;
     html += `</div>`;
   }
 
   if (trivia && (trivia.current || trivia.previous)) {
-    html += `<div style="margin-top:8px;padding-top:14px;border-top:1px dashed #ddd">`;
+    html += `<div style="margin-top:8px">`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f;margin-bottom:8px">🧠 Trivia</div>`;
     if (trivia.previous) {
       html += `<div style="font-size:12px;color:#888;margin-bottom:10px"><em>Last week's answer:</em> ${trivia.previous.answer}</div>`;
