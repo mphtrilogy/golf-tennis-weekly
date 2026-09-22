@@ -1176,13 +1176,25 @@ export default function App() {
       {view === 'home' && (
       <div className="wrap">
         <section>
-          <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
-          <DispatchCard
-            name={dailyPlayer.name}
-            fact={dailyPlayer.fact}
-            tag={dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}
-            theme={theme}
-          />
+          {searchedPlayerName ? (
+            <>
+              <div className="section-head">
+                <span className="section-title">🔍 {searchedPlayerName}</span>
+                <a href="#" className="section-link" onClick={(e) => { e.preventDefault(); setSearchedPlayerName(null); setPlayerSearchInput(''); }}>← Back to Daily Spotlight</a>
+              </div>
+              <DispatchCard name={searchedPlayerName} tag="SEARCH RESULT" theme={theme} />
+            </>
+          ) : (
+            <>
+              <div className="section-head"><span className="section-title">Daily Spotlight</span></div>
+              <DispatchCard
+                name={dailyPlayer.name}
+                fact={dailyPlayer.fact}
+                tag={dailyPlayer.active ? 'ACTIVE TODAY' : 'LEGENDS SERIES'}
+                theme={theme}
+              />
+            </>
+          )}
 
           <div className="player-search-inline">
             <input
@@ -1196,16 +1208,6 @@ export default function App() {
               Search
             </button>
           </div>
-
-          {searchedPlayerName && (
-            <div style={{ marginTop: 14 }}>
-              <div className="section-head">
-                <span className="section-title">Search Result: {searchedPlayerName}</span>
-                <a href="#" className="section-link" onClick={(e) => { e.preventDefault(); setSearchedPlayerName(null); setPlayerSearchInput(''); }}>Clear ✕</a>
-              </div>
-              <DispatchCard name={searchedPlayerName} tag="SEARCH RESULT" theme={theme} />
-            </div>
-          )}
         </section>
 
         <section>
