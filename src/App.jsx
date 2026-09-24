@@ -616,7 +616,9 @@ export default function App() {
   useEffect(() => {
     // Archive list — only ever shows features that have actually been
     // sent (sent_on not null), enforced at the database level via RLS,
-    // not just by this query.
+    // not just by this query. Capped at 100 (~2 years of weekly output
+    // per sport) rather than true pagination — comfortable headroom
+    // for now, worth revisiting with real pagination once that's close.
     let cancelled = false;
     setFeaturesList(null);
     supabase
@@ -624,7 +626,7 @@ export default function App() {
       .select('sport, title, slug, body, published_date, sent_on')
       .eq('sport', theme)
       .order('sent_on', { ascending: false })
-      .limit(20)
+      .limit(100)
       .then(({ data, error }) => {
         if (!cancelled) setFeaturesList(error || !data ? [] : data);
       })
@@ -1144,6 +1146,7 @@ export default function App() {
               ['rankings', 'Rankings'],
               ['schedule', 'Schedule'],
               ['majors', 'Majors & History'],
+              ['deepdives', theme === 'golf' ? "⛳ Bird's Eye View" : '🎾 Hawkeye'],
               ['reference', 'Reference'],
             ].map(([key, label]) => (
               <a
@@ -1814,6 +1817,31 @@ export default function App() {
               <div className="feature-body">{renderMarkdownLite(currentFeature.body)}</div>
             </article>
           )}
+        </div>
+      )}
+
+      {view === 'deepdives' && (
+        <div className="wrap">
+          <a href="#" className="back-home" onClick={(e) => { e.preventDefault(); navigateTo('home'); }}>← Back to Home</a>
+          <h2>{theme === 'golf' ? "⛳ Bird's Eye View" : '🎾 Hawkeye'}</h2>
+          <p style={{ color: 'var(--ink-soft)', marginTop: -8, marginBottom: 20 }}>
+            The weekly {theme === 'golf' ? 'golf' : 'tennis'} deep dive — every piece that's run in the newsletter, archived here for good.
+          </p>
+          <div className="majors-block" style={{ marginBottom: 20 }}>
+            {featuresList === null ? (
+              <div className="major-row"><div className="major-detail">Loading…</div></div>
+            ) : featuresList.length === 0 ? (
+              <div className="major-row"><div className="major-detail">Nothing published yet — check back after the first newsletter goes out.</div></div>
+            ) : (
+              featuresList.map((f) => (
+                <div className="major-row feature-preview-row" key={f.slug}>
+                  <div className="major-name">{f.title}</div>
+                  <div className="major-detail">{excerptWords(f.body, 150)}</div>
+                  <a href="#" className="feature-read-more" onClick={(e) => { e.preventDefault(); navigateToFeature(f.slug); }}>Read full piece →</a>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
 
