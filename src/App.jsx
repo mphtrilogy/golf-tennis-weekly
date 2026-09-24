@@ -1175,6 +1175,20 @@ export default function App() {
 
       {view === 'home' && (
       <div className="wrap">
+        {featuresList && featuresList.length > 0 && (
+          <div className="latest-deepdive-card">
+            <div className="latest-deepdive-label">
+              {theme === 'golf' ? "⛳ BIRD'S EYE VIEW" : '🎾 HAWKEYE'} · THIS WEEK'S DEEP DIVE
+            </div>
+            <a
+              href="#"
+              className="latest-deepdive-title"
+              onClick={(e) => { e.preventDefault(); navigateToFeature(featuresList[0].slug); }}
+            >
+              {featuresList[0].title} →
+            </a>
+          </div>
+        )}
         <section>
           {searchedPlayerName ? (
             <>
