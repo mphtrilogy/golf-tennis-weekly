@@ -874,8 +874,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [theme]);
 
-  const [liveNextEvent, setLiveNextEvent] = useState(null);
-
   const [liveMajors, setLiveMajors] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -936,37 +934,25 @@ export default function App() {
     return { champions2026, upcoming2027, fmt, money };
   }, [liveMajors, theme]);
 
-  useEffect(() => {
-    if (theme !== 'golf') { setLiveNextEvent([]); return; }
-    let cancelled = false;
-    setLiveNextEvent(null);
-    supabase
-      .from('gtw_next_event')
-      .select('*')
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        setLiveNextEvent(error || !data ? [] : data);
-      })
-      .catch(() => { if (!cancelled) setLiveNextEvent([]); });
-    return () => { cancelled = true; };
-  }, [theme]);
-
   const golfLive = useMemo(() => {
-    const nextFromCalendar = () => {
-      if (!liveNextEvent || liveNextEvent.length === 0) return null;
-      const soonest = [...liveNextEvent].sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0];
+    const nextFromCalendar = (excludeName) => {
+      if (!golfTourCalendar || golfTourCalendar.length === 0) return null;
+      const now = Date.now();
+      const soonest = golfTourCalendar
+        .filter((t) => t.tournament_name !== excludeName && new Date(t.start_date).getTime() > now)
+        .sort((a, b) => new Date(a.start_date) - new Date(b.start_date))[0];
       if (!soonest) return null;
       const when = soonest.start_date
         ? new Date(soonest.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
         : null;
-      return { name: soonest.event_name, meta: when ? `Starts ${when}` : 'Date TBD' };
+      return { name: soonest.tournament_name, meta: when ? `Starts ${when}` : 'Date TBD' };
     };
 
     if (!liveLeaderboard || liveLeaderboard.length === 0) {
       // No active tournament right now (a real calendar gap, not a
       // fetch failure) — still show the real next scheduled event
       // rather than falling all the way back to fabricated sample data.
-      const next = nextFromCalendar();
+      const next = nextFromCalendar(null);
       if (!next) return null;
       return { now: { name: 'No Tournament In Progress', meta: 'Between events' }, next, leaderboardRows: [] };
     }
@@ -987,10 +973,10 @@ export default function App() {
 
     return {
       now: pga || lpga,
-      next: (pga && lpga && lpga.name !== pga.name) ? lpga : nextFromCalendar(),
+      next: (pga && lpga && lpga.name !== pga.name) ? lpga : nextFromCalendar((pga || lpga)?.name),
       leaderboardRows: (pga || lpga)?.rows.slice(0, 15) || [],
     };
-  }, [liveLeaderboard, liveNextEvent]);
+  }, [liveLeaderboard, golfTourCalendar]);
 
   const activeLive = theme === 'tennis' ? tourneyLive : golfLive;
 
