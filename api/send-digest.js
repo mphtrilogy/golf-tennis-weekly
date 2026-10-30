@@ -211,10 +211,13 @@ function getSurfaceFor(tournamentName) {
 }
 
 async function getRecapAndPreview(supabase, sport) {
-  // Recap: most recently completed major, if one wrapped recently.
-  // Kept deliberately simple for now — arbitrary non-major weekly
-  // recap logic (which regular tour stop just finished) is a real
-  // V2 addition, not attempted here.
+  // Recap: most recently completed major OR team event, whichever
+  // actually wrapped more recently. Majors (gtw_majors) cover the 4
+  // individual-winner majors per sport; team events (gtw_team_events)
+  // cover Presidents/Ryder Cup, Davis Cup, etc. — results with a
+  // winning/losing side instead of a single winner. Both are checked
+  // and compared by end_date so a team event never goes invisible to
+  // the recap just because it isn't a "major."
   const { data: majors } = await supabase
     .from('gtw_majors')
     .select('*')
@@ -222,7 +225,29 @@ async function getRecapAndPreview(supabase, sport) {
     .eq('status', 'completed')
     .order('end_date', { ascending: false })
     .limit(1);
-  const recap = majors && majors.length > 0 ? majors[0] : null;
+  const majorRecap = majors && majors.length > 0 ? { ...majors[0], type: 'major' } : null;
+
+  const { data: teamEvents } = await supabase
+    .from('gtw_team_events')
+    .select('*')
+    .eq('sport', sport)
+    .eq('status', 'completed')
+    .order('end_date', { ascending: false })
+    .limit(1);
+  const teamRecap = teamEvents && teamEvents.length > 0 ? {
+    type: 'team',
+    display_name: teamEvents[0].event_name,
+    winner_name: teamEvents[0].winning_side,
+    losing_side: teamEvents[0].losing_side,
+    venue_name: teamEvents[0].venue_name,
+    score: teamEvents[0].score,
+    end_date: teamEvents[0].end_date,
+  } : null;
+
+  let recap = majorRecap;
+  if (teamRecap && (!majorRecap || teamRecap.end_date > majorRecap.end_date)) {
+    recap = teamRecap;
+  }
 
   // Preview: next 3 scheduled tournaments from the season calendar,
   // not just the very next one - gives a fuller look at what's coming.
@@ -409,11 +434,19 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
 
   if (recap) {
     html += `<div style="${divider};display:flex;align-items:center;gap:12px">`;
-    if (recapPhoto) html += `<img src="${recapPhoto}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid #e0dccf;flex-shrink:0">`;
+    // recapPhoto only applies to an individual-winner major — a team
+    // event's "winner_name" is a country/side, not a person, so there's
+    // never a headshot to fetch or show for it.
+    if (recapPhoto && recap.type !== 'team') html += `<img src="${recapPhoto}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid #e0dccf;flex-shrink:0">`;
     html += `<div>`;
     html += `<div style="font-family:Georgia,serif;font-weight:bold;font-size:15px;color:#14181f">🏆 <a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(recap.display_name || '')}" style="color:#14181f;text-decoration:none">${recap.display_name || 'Last Major'}</a></div>`;
     html += `<div style="font-size:14px;color:#444;line-height:1.6">`;
-    if (recap.winner_name) html += `Winner: <strong>${recap.winner_name}</strong>`;
+    if (recap.type === 'team') {
+      html += `Winner: <strong>${recap.winner_name}</strong> def. ${recap.losing_side}`;
+      if (recap.score) html += `, ${recap.score}`;
+    } else if (recap.winner_name) {
+      html += `Winner: <strong>${recap.winner_name}</strong>`;
+    }
     if (recap.venue_name) html += ` at <a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(recap.venue_name)}" style="color:#c97a2b;text-decoration:none">${recap.venue_name}</a>`;
     if (recap.winner_share) html += ` · $${(recap.winner_share / 1000000).toFixed(2)}M`;
     html += ` &nbsp;<a href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(recap.display_name || '')}" style="color:#c97a2b;text-decoration:none;font-size:12px">Full results →</a>`;
@@ -528,6 +561,11 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
 // tiebreak is golf, arbitrarily but consistently, so ordering never
 // looks random week to week.
 function determineLeadSport(golfContent, tennisContent) {
+  if (golfContent.recap && tennisContent.recap) {
+    // Both have a recap (major or team event) — whichever actually
+    // wrapped more recently leads, by real end_date, not sport order.
+    return golfContent.recap.end_date >= tennisContent.recap.end_date ? 'golf' : 'tennis';
+  }
   if (golfContent.recap && !tennisContent.recap) return 'golf';
   if (tennisContent.recap && !golfContent.recap) return 'tennis';
   if (golfContent.feature && !tennisContent.feature) return 'golf';
@@ -538,7 +576,12 @@ function determineLeadSport(golfContent, tennisContent) {
 function buildHookParagraph(leadSport, content) {
   const sportLabel = leadSport === 'golf' ? 'golf' : 'tennis';
   if (content.recap?.winner_name) {
-    return `<strong>${content.recap.winner_name}</strong> just won ${content.recap.display_name || 'the week\'s big event'} — that's where we start, plus what's next and a story worth your time.`;
+    // A team event reads as "won the Presidents Cup" (with "the"),
+    // not "won Presidents Cup" — matches how these are actually named.
+    const eventPhrase = content.recap.type === 'team'
+      ? `the ${content.recap.display_name}`
+      : (content.recap.display_name || 'the week\'s big event');
+    return `<strong>${content.recap.winner_name}</strong> just won ${eventPhrase} — that's where we start, plus what's next and a story worth your time.`;
   }
   if (content.feature) {
     return `This week's big read: <strong>${content.feature.title}</strong>.`;
@@ -548,12 +591,26 @@ function buildHookParagraph(leadSport, content) {
 
 function buildSubjectLine(golfContent, tennisContent) {
   // Prefer leading with whichever sport actually has a recap this
-  // week — a real result beats a generic subject line.
-  if (golfContent?.recap?.winner_name) {
-    return `⛳ ${golfContent.recap.winner_name} Wins ${golfContent.recap.display_name || 'the Major'} — Golf & Tennis Weekly`;
+  // week — a real result beats a generic subject line. Compare by
+  // end_date across both sports too, so the genuinely fresher result
+  // (team event or major) leads, not just whichever sport is checked first.
+  const golfRecap = golfContent?.recap;
+  const tennisRecap = tennisContent?.recap;
+  let leader = null;
+  if (golfRecap?.winner_name && tennisRecap?.winner_name) {
+    leader = golfRecap.end_date >= tennisRecap.end_date ? { sport: 'golf', recap: golfRecap } : { sport: 'tennis', recap: tennisRecap };
+  } else if (golfRecap?.winner_name) {
+    leader = { sport: 'golf', recap: golfRecap };
+  } else if (tennisRecap?.winner_name) {
+    leader = { sport: 'tennis', recap: tennisRecap };
   }
-  if (tennisContent?.recap?.winner_name) {
-    return `🎾 ${tennisContent.recap.winner_name} Wins ${tennisContent.recap.display_name || 'the Major'} — Golf & Tennis Weekly`;
+
+  if (leader) {
+    const emoji = leader.sport === 'golf' ? '⛳' : '🎾';
+    const eventPhrase = leader.recap.type === 'team'
+      ? `the ${leader.recap.display_name}`
+      : (leader.recap.display_name || 'the Major');
+    return `${emoji} ${leader.recap.winner_name} Wins ${eventPhrase} — Golf & Tennis Weekly`;
   }
   return '⛳🎾 Golf & Tennis Weekly — This Week';
 }
@@ -605,8 +662,12 @@ export default async function handler(req, res) {
     tennisContent.spotlight = await getHistorySpotlight(supabase, 'tennis');
     golfContent.tip = getWeeklyTip('golf');
     tennisContent.tip = getWeeklyTip('tennis');
-    golfContent.recapPhoto = await fetchWikipediaPhoto(golfContent.recap?.winner_name);
-    tennisContent.recapPhoto = await fetchWikipediaPhoto(tennisContent.recap?.winner_name);
+    // Skip the photo fetch entirely for a team-event recap — winner_name
+    // there is a country/side ("United States"), not a person, and a
+    // Wikipedia search on that would either return nothing useful or a
+    // wrong/unrelated photo.
+    golfContent.recapPhoto = golfContent.recap?.type === 'team' ? null : await fetchWikipediaPhoto(golfContent.recap?.winner_name);
+    tennisContent.recapPhoto = tennisContent.recap?.type === 'team' ? null : await fetchWikipediaPhoto(tennisContent.recap?.winner_name);
     golfContent.spotlightPhoto = await fetchWikipediaPhoto(golfContent.spotlight?.winner_name);
     tennisContent.spotlightPhoto = await fetchWikipediaPhoto(tennisContent.spotlight?.winner_name);
     golfContent.news = await getTopNews(supabase, 'golf');
