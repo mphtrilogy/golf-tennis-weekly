@@ -555,33 +555,59 @@ function buildSportSection(sport, { recap, preview, feature, spotlight, tip, rec
   return html;
 }
 
+// A recap only earns the headline while it is genuinely fresh. In the
+// offseason the latest completed event can be weeks old; leading with it
+// makes every issue look identical. Past this window the recap still
+// shows in the body as the latest result, but the headline, hook and
+// preheader switch to the week's feature essay instead.
+const HEADLINE_FRESH_DAYS = 10;
+
+function freshRecap(recap) {
+  if (!recap?.winner_name || !recap.end_date) return null;
+  const ageDays = (Date.now() - new Date(recap.end_date + 'T12:00:00Z').getTime()) / 86400000;
+  return ageDays <= HEADLINE_FRESH_DAYS ? recap : null;
+}
+
+// "The One-Iron at Merion: How Ben Hogan..." -> "The One-Iron at Merion".
+// Drops a leading "Encore: " so reruns still get a clean subject line.
+function shortTitle(title) {
+  if (!title) return '';
+  const t = title.replace(/^Encore:\s*/i, '');
+  const head = t.split(':')[0].trim();
+  return head.length >= 8 ? head : t;
+}
+
 // Which sport leads the issue: whichever has a recap (a major that
 // just wrapped) is inherently the bigger, fresher story. If both or
 // neither do, fall back to whichever has a feature ready. Final
 // tiebreak is golf, arbitrarily but consistently, so ordering never
 // looks random week to week.
 function determineLeadSport(golfContent, tennisContent) {
-  if (golfContent.recap && tennisContent.recap) {
-    // Both have a recap (major or team event) — whichever actually
-    // wrapped more recently leads, by real end_date, not sport order.
-    return golfContent.recap.end_date >= tennisContent.recap.end_date ? 'golf' : 'tennis';
+  const g = golfContent.headlineRecap;
+  const t = tennisContent.headlineRecap;
+  if (g && t) {
+    // Both have a fresh recap — whichever wrapped more recently leads.
+    return g.end_date >= t.end_date ? 'golf' : 'tennis';
   }
-  if (golfContent.recap && !tennisContent.recap) return 'golf';
-  if (tennisContent.recap && !golfContent.recap) return 'tennis';
+  if (g) return 'golf';
+  if (t) return 'tennis';
+  // No fresh result (offseason): lead with whichever sport has an essay
+  // ready, alternating by week so the headline sport changes every issue.
   if (golfContent.feature && !tennisContent.feature) return 'golf';
   if (tennisContent.feature && !golfContent.feature) return 'tennis';
-  return 'golf';
+  const weekNum = Math.floor(Date.now() / (7 * 86400000));
+  return weekNum % 2 === 0 ? 'golf' : 'tennis';
 }
 
 function buildHookParagraph(leadSport, content) {
   const sportLabel = leadSport === 'golf' ? 'golf' : 'tennis';
-  if (content.recap?.winner_name) {
+  if (content.headlineRecap?.winner_name) {
     // A team event reads as "won the Presidents Cup" (with "the"),
     // not "won Presidents Cup" — matches how these are actually named.
-    const eventPhrase = content.recap.type === 'team'
-      ? `the ${content.recap.display_name}`
-      : (content.recap.display_name || 'the week\'s big event');
-    return `<strong>${content.recap.winner_name}</strong> just won ${eventPhrase} — that's where we start, plus what's next and a story worth your time.`;
+    const eventPhrase = content.headlineRecap.type === 'team'
+      ? `the ${content.headlineRecap.display_name}`
+      : (content.headlineRecap.display_name || 'the week\'s big event');
+    return `<strong>${content.headlineRecap.winner_name}</strong> just won ${eventPhrase} — that's where we start, plus what's next and a story worth your time.`;
   }
   if (content.feature) {
     return `This week's big read: <strong>${content.feature.title}</strong>.`;
@@ -590,27 +616,19 @@ function buildHookParagraph(leadSport, content) {
 }
 
 function buildSubjectLine(golfContent, tennisContent) {
-  // Prefer leading with whichever sport actually has a recap this
-  // week — a real result beats a generic subject line. Compare by
-  // end_date across both sports too, so the genuinely fresher result
-  // (team event or major) leads, not just whichever sport is checked first.
-  const golfRecap = golfContent?.recap;
-  const tennisRecap = tennisContent?.recap;
-  let leader = null;
-  if (golfRecap?.winner_name && tennisRecap?.winner_name) {
-    leader = golfRecap.end_date >= tennisRecap.end_date ? { sport: 'golf', recap: golfRecap } : { sport: 'tennis', recap: tennisRecap };
-  } else if (golfRecap?.winner_name) {
-    leader = { sport: 'golf', recap: golfRecap };
-  } else if (tennisRecap?.winner_name) {
-    leader = { sport: 'tennis', recap: tennisRecap };
+  const leadSport = determineLeadSport(golfContent, tennisContent);
+  const lead = leadSport === 'golf' ? golfContent : tennisContent;
+  const emoji = leadSport === 'golf' ? '⛳' : '🎾';
+  const recap = lead.headlineRecap;
+  if (recap?.winner_name) {
+    const eventPhrase = recap.type === 'team'
+      ? `the ${recap.display_name}`
+      : (recap.display_name || 'the Major');
+    return `${emoji} ${recap.winner_name} Wins ${eventPhrase} — Golf & Tennis Weekly`;
   }
-
-  if (leader) {
-    const emoji = leader.sport === 'golf' ? '⛳' : '🎾';
-    const eventPhrase = leader.recap.type === 'team'
-      ? `the ${leader.recap.display_name}`
-      : (leader.recap.display_name || 'the Major');
-    return `${emoji} ${leader.recap.winner_name} Wins ${eventPhrase} — Golf & Tennis Weekly`;
+  // No fresh result: the essay is the headline.
+  if (lead.feature?.title) {
+    return `${emoji} ${shortTitle(lead.feature.title)} — Golf & Tennis Weekly`;
   }
   return '⛳🎾 Golf & Tennis Weekly — This Week';
 }
@@ -656,6 +674,8 @@ export default async function handler(req, res) {
 
     const golfContent = await getRecapAndPreview(supabase, 'golf');
     const tennisContent = await getRecapAndPreview(supabase, 'tennis');
+    golfContent.headlineRecap = freshRecap(golfContent.recap);
+    tennisContent.headlineRecap = freshRecap(tennisContent.recap);
     golfContent.feature = await getNextUnsentFeature(supabase, 'golf');
     tennisContent.feature = await getNextUnsentFeature(supabase, 'tennis');
     golfContent.spotlight = await getHistorySpotlight(supabase, 'golf');
@@ -722,9 +742,11 @@ export default async function handler(req, res) {
       const greeting = sub.name ? `, ${sub.name}` : '';
       const unsubUrl = `${SITE_URL}/api/unsubscribe?id=${sub.id}`;
       const forwardUrl = `mailto:?subject=${encodeURIComponent('Check out Golf & Tennis Weekly')}&body=${encodeURIComponent(`Thought you might like this: ${SITE_URL}`)}`;
-      const preheaderText = leadContent.recap?.winner_name
-        ? `${leadContent.recap.winner_name} wins, plus what's next and this week's read.`
-        : 'This week in golf and tennis.';
+      const preheaderText = leadContent.headlineRecap?.winner_name
+        ? `${leadContent.headlineRecap.winner_name} wins, plus what's next and this week's read.`
+        : (leadContent.feature?.title
+          ? `This week's read: ${shortTitle(leadContent.feature.title)} — plus rankings, trivia and what's next.`
+          : 'This week in golf and tennis.');
 
       const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f2ede1;font-family:Georgia,serif;color:#14181f">
